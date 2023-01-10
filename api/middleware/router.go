@@ -8,11 +8,13 @@ import (
 
 	"github.com/DefiantLabs/RedpointSwap/api/endpoints"
 	"github.com/DefiantLabs/RedpointSwap/config"
+	"github.com/DefiantLabs/RedpointSwap/osmosis"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
 
 var Initialized bool
+var HotWalletAddress string
 
 func InitializeRestApi(confFile string) {
 	var err error
@@ -29,12 +31,15 @@ func InitializeRestApi(confFile string) {
 	config.Logger.Info("Logger start", zap.Time("Init() time", time.Now()))
 
 	fmt.Printf("Initializing API with the following CORS domains: %v", config.Conf.Api.AllowedCORSDomains)
-	router := initRouter(config.Conf.Api.AllowedCORSDomains)
-	router.Run(":80") //TODO... HTTPS
+	router, err := initRouter(config.Conf.Api.AllowedCORSDomains)
+	if err != nil {
+		panic("Could not initialize REST API, error " + err.Error())
+	}
+	router.Run(":80")
 	Initialized = true
 }
 
-func initRouter(allowedCORSDomains string) *gin.Engine {
+func initRouter(allowedCORSDomains string) (*gin.Engine, error) {
 	allowedDomains := map[string]struct{}{}
 	domains := strings.Split(allowedCORSDomains, ",")
 	for _, domain := range domains {
@@ -50,13 +55,21 @@ func initRouter(allowedCORSDomains string) *gin.Engine {
 	router.SetTrustedProxies(nil)
 
 	api := router.Group("/api")
-	api.Use(PreAuth(), Auth())
+	api.Use(PreAuth())
+	secured := api.Group("/secured")
+	secured.Use(Auth())
 
-	api.POST("/authz", endpoints.SwapAuthz)
+	api.GET("/grantee", AuthzGranteeInfo)
+	api.POST("/token", GenerateToken)
 	api.POST("/zenith", endpoints.SwapZenith)
-	//TODO: endpoint to grant authz && bind the user's address to a JWT so they can prove they are allowed to do swaps
 
-	return router
+	//Since users do NOT directly sign Authz swap requests, this endpoint is secured with a JWT to prevent abuse
+	secured.POST("/authz", endpoints.SwapAuthz)
+
+	conf := config.Conf
+	addr, err := osmosis.GetKeyAddressForKey(conf.Api.ChainID, conf.Api.Rpc, conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
+	HotWalletAddress = addr
+	return router, err
 }
 
 // Returns the origin hostname if found, or empty string otherwise.

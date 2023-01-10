@@ -23,6 +23,27 @@ func Initialize() {
 	encodingConfig = osmosisApp.MakeEncodingConfig()
 }
 
+func GetKeyAddressForKey(chain string, node string, osmosisHomeDir string, keyringBackend string, key string) (string, error) {
+	clientCtx := client.Context{
+		ChainID:      chain,
+		NodeURI:      node,
+		KeyringDir:   osmosisHomeDir,
+		GenerateOnly: false,
+	}
+
+	ctxKeyring, krErr := client.NewKeyringFromBackend(clientCtx, keyringBackend)
+	if krErr != nil {
+		return "", krErr
+	}
+
+	info, err := ctxKeyring.Key(key)
+	if err != nil {
+		return "", err
+	}
+	addr := info.GetAddress()
+	return sdk.Bech32ifyAddressBytes("osmo", addr)
+}
+
 func GetOsmosisTxClient(chain string, node string, osmosisHomeDir string, keyringBackend string, fromFlag string) (client.Context, error) {
 	clientCtx := client.Context{
 		ChainID:      chain,
@@ -70,7 +91,34 @@ func GetOsmosisTxClient(chain string, node string, osmosisHomeDir string, keyrin
 	return clientCtx, nil
 }
 
-func SubmitTxAwaitResponse(clientCtx client.Context, msgs []sdk.Msg, gas uint64, gasPrices string, fees string) (*txTypes.GetTxResponse, error) {
+func SignSubmitTx(clientCtx client.Context, msgs []sdk.Msg, gas uint64) (*sdk.TxResponse, error) {
+	txf := BuildTxFactory(clientCtx, gas)
+	txf, txfErr := PrepareFactory(clientCtx, clientCtx.GetFromName(), txf)
+	if txfErr != nil {
+		return nil, txfErr
+	}
+
+	txBuilder, err := tx.BuildUnsignedTx(txf, msgs...)
+	if err != nil {
+		return nil, err
+	}
+
+	txBuilder.SetFeeGranter(clientCtx.GetFeeGranterAddress())
+
+	err = tx.Sign(txf, clientCtx.GetFromName(), txBuilder, true)
+	if err != nil {
+		return nil, err
+	}
+
+	txBytes, err := clientCtx.TxConfig.TxEncoder()(txBuilder.GetTx())
+	if err != nil {
+		return nil, err
+	}
+
+	return clientCtx.BroadcastTxSync(txBytes)
+}
+
+func SubmitTxAwaitResponse(clientCtx client.Context, msgs []sdk.Msg, gas uint64) (*txTypes.GetTxResponse, error) {
 	txf := BuildTxFactory(clientCtx, gas)
 	txf, txfErr := PrepareFactory(clientCtx, clientCtx.GetFromName(), txf)
 	if txfErr != nil {
