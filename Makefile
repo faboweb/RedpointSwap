@@ -27,9 +27,9 @@ clean:
 	rm -rf build
 
 build-docker-amd:
-	docker build -t $(FQCN):$(VERSION) -f ./Dockerfile \
+	docker build -t $(FQCN) -f ./Dockerfile \
 	--build-arg TARGETPLATFORM=linux/amd64 .
 
 build-docker-arm:
-	docker build -t $(FQCN):$(VERSION) -f ./Dockerfile \
+	docker build -t $(FQCN) -f ./Dockerfile \
 	--build-arg TARGETPLATFORM=linux/arm64 .
