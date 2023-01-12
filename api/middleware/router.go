@@ -2,7 +2,6 @@ package middleware
 
 import (
 	"fmt"
-	"os"
 	"strings"
 	"time"
 
@@ -16,14 +15,7 @@ import (
 var Initialized bool
 var HotWalletAddress string
 
-func InitializeRestApi(confFile string) {
-	var err error
-	config.Conf, err = config.GetConfig(confFile)
-	if err != nil {
-		fmt.Println("Error gettting config file. Err: ", err)
-		os.Exit(1)
-	}
-
+func InitializeRestApi() {
 	logLevel := config.Conf.Api.LogLevel
 	logPath := config.Conf.Api.LogPath
 

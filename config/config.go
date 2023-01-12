@@ -27,9 +27,10 @@ type jwt struct {
 }
 
 type zenith struct {
-	ChainID      string
-	Rpc          string //Will be replaced by some API endpoint once I understand how to use Zenith
-	HotWalletKey string
+	ChainID          string
+	ZenithAuctionUrl string
+	ZenithBidUrl     string
+	HotWalletKey     string
 }
 
 type api struct {
@@ -42,6 +43,7 @@ type api struct {
 	KeyringHomeDir     string //This is just a directory where the keyring-backend will be found, you do not need to run a node
 	KeyringBackend     string //Right now this pretty much has to be "test"
 	Rpc                string
+	Websocket          string //this should be something like rpc.osmosis.zone:443 (no protocol prefix)
 	HotWalletKey       string
 }
 
