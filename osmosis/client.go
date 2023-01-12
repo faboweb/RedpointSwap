@@ -13,8 +13,8 @@ import (
 	txTypes "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	authTypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	osmosisApp "github.com/osmosis-labs/osmosis/v12/app"
-	osmosisParams "github.com/osmosis-labs/osmosis/v12/app/params"
+	osmosisApp "github.com/osmosis-labs/osmosis/v13/app"
+	osmosisParams "github.com/osmosis-labs/osmosis/v13/app/params"
 )
 
 var encodingConfig osmosisParams.EncodingConfig

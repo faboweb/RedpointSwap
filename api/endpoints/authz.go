@@ -15,7 +15,7 @@ import (
 	"github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/authz"
 	"github.com/gin-gonic/gin"
-	gamm "github.com/osmosis-labs/osmosis/v12/x/gamm/types"
+	gamm "github.com/osmosis-labs/osmosis/v13/x/gamm/types"
 	"go.uber.org/zap"
 )
 

@@ -2,7 +2,7 @@ package api
 
 import (
 	cosmosTypes "github.com/cosmos/cosmos-sdk/types"
-	"github.com/osmosis-labs/osmosis/v12/x/gamm/types"
+	"github.com/osmosis-labs/osmosis/v13/x/gamm/types"
 )
 
 // Results of the simulation
