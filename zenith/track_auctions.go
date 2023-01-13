@@ -3,6 +3,9 @@ package zenith
 import (
 	"sync"
 	"time"
+
+	"github.com/DefiantLabs/RedpointSwap/config"
+	"go.uber.org/zap"
 )
 
 // Tracks upcoming blocks. Any blocks past the current chain height are removed.
@@ -14,6 +17,7 @@ type FutureBlock struct {
 	Height                 int64     //the block height of the future block
 	ProjectedBlocktime     time.Time //the time we think this block will happen on chain
 	MillisecondsUntilBlock int64     //how many milliseconds until we think this block will happen
+	Auction                *AuctionResponse
 }
 
 // TODO: notify the admin if the Zenith endpoint stops working
@@ -25,6 +29,8 @@ type FutureBlock struct {
 // Overall, we are tracking available Zenith blocks using Mekatek's service endpoints.
 // This function only tracks what blocks Zenith will produce -- it does not bid on auctions.
 func ZenithBlockNotificationHandler(lastChainHeight int64, millisecondsBetweenBlocks int64) {
+	conf := config.Conf
+
 	// Remove any blocks that already happened
 	zenithBlocks.Range(func(key, _ any) bool {
 		if key.(int64) <= lastChainHeight {
@@ -37,6 +43,32 @@ func ZenithBlockNotificationHandler(lastChainHeight int64, millisecondsBetweenBl
 		//We have never queried Zenith for the given block
 		if _, ok := zenithBlocks.Load(height); !ok {
 
+			req := &AuctionRequest{
+				ChainID: conf.Zenith.ChainID,
+				Height:  height,
+			}
+
+			auctionResp, zenithCode, err := req.getAvailableAuction("http://api.mekatek.xyz/v0/auction")
+
+			//If there was an error or if the auction is too far in the future, we'll need to requery.
+			//Otherwise, the query succeeded and we need to record whether or not this is a Zenith block.
+			if err != nil && zenithCode != AuctionTooFarInFuture {
+				msUntilBlock := (height - lastChainHeight) * millisecondsBetweenBlocks
+
+				zBlock := &FutureBlock{
+					IsZenithBlock:          zenithCode == ZenithAuction,
+					Height:                 height,
+					ProjectedBlocktime:     time.Now().Add(time.Millisecond * time.Duration(msUntilBlock)),
+					MillisecondsUntilBlock: msUntilBlock,
+					Auction:                auctionResp,
+				}
+
+				if zBlock.IsZenithBlock {
+					config.Logger.Debug("Zenith block", zap.Int64("Found zenith block at height", zBlock.Height))
+				}
+
+				zenithBlocks.Store(height, zBlock)
+			}
 		}
 	}
 }

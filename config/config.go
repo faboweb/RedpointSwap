@@ -16,6 +16,7 @@ var Logger *zap.Logger //Global logger
 var Conf Config        //Global config
 
 type Config struct {
+	Authz              authz
 	JWT                jwt
 	Zenith             zenith
 	Api                api
@@ -31,6 +32,10 @@ type zenith struct {
 	ZenithAuctionUrl string
 	ZenithBidUrl     string
 	HotWalletKey     string
+}
+
+type authz struct {
+	MaximumAuthzGrantSeconds float64 //Maximum number of seconds an authz grant is allowed to be valid
 }
 
 type api struct {

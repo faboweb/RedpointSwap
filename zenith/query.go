@@ -5,19 +5,22 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+
+	"github.com/DefiantLabs/RedpointSwap/config"
+	"go.uber.org/zap"
 )
 
-type ZenithBlockResponse int
+type ZenithResponse int
 
 const (
-	NotZenithAuction      ZenithBlockResponse = iota //The block and chain are valid, but this isn't a Zenith block
-	PastAuction                                      //Auction is already in the past
-	AuctionTooFarInFuture                            //Auction is too far in the future
-	ZenithAuction                                    //Auction is a Zenith block
-	QueryError                                       //We couldn't complete the query for some reason (see error)
+	NotZenithAuction      ZenithResponse = iota //The block and chain are valid, but this isn't a Zenith block
+	PastAuction                                 //Auction is already in the past
+	AuctionTooFarInFuture                       //Auction is too far in the future
+	ZenithAuction                               //Auction is a Zenith block
+	QueryError                                  //We couldn't complete the query for some reason (see error)
 )
 
-func (req *AuctionRequest) getAvailableAuction(zenithUrl string) (*AuctionResponse, ZenithBlockResponse, error) {
+func (req *AuctionRequest) getAvailableAuction(zenithUrl string) (*AuctionResponse, ZenithResponse, error) {
 	zenithReq, err := url.Parse(zenithUrl)
 	if err != nil {
 		return nil, QueryError, err
@@ -30,16 +33,19 @@ func (req *AuctionRequest) getAvailableAuction(zenithUrl string) (*AuctionRespon
 	zenithReq.RawQuery = params.Encode()
 
 	var auctionResp AuctionResponse
+	var zenithCode ZenithResponse = QueryError
+
 	resp, err := http.Get(zenithReq.String())
 	if err != nil {
-		return &auctionResp, QueryError, err
+		return nil, QueryError, err
 	}
 
 	err = json.NewDecoder(resp.Body).Decode(&auctionResp)
-	var zenithCode ZenithBlockResponse = NotZenithAuction
+	if err != nil {
+		return nil, QueryError, err
+	}
 
-	//Any http code 200-299
-	if resp.StatusCode/200 == 1 {
+	if resp.StatusCode == 200 {
 		zenithCode = ZenithAuction
 	} else if resp.StatusCode == 410 {
 		zenithCode = PastAuction
@@ -47,6 +53,9 @@ func (req *AuctionRequest) getAvailableAuction(zenithUrl string) (*AuctionRespon
 		zenithCode = AuctionTooFarInFuture
 	} else if resp.StatusCode == 417 {
 		zenithCode = NotZenithAuction
+	} else {
+		zenithCode = QueryError
+		config.Logger.Error("Zenith error", zap.Int("Unrecognized HTTP status", resp.StatusCode))
 	}
 
 	return &auctionResp, zenithCode, err

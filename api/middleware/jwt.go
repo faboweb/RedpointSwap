@@ -136,23 +136,24 @@ func GenerateToken(context *gin.Context) {
 
 	grantAuthorization := authzGrant.Grant.GetAuthorization()
 	grantType := grantAuthorization.MsgTypeURL()
+	secondsUntilGrantExpires := time.Until(authzGrant.Grant.Expiration).Seconds()
 
 	//TODO: need to test and make sure the type starts with a slash, but I think so based on the CLI command I tested.
 	if grantType != "/osmosis.gamm.v1beta1.MsgSwapExactAmountIn" {
 		config.Logger.Error("TX is not an authz grant", zap.String("cosmos TX", "Invalid grant authorization"))
-		context.JSON(http.StatusBadRequest, "failed to verify user address (7)")
+		context.JSON(http.StatusBadRequest, "authz grant is not valid")
 		return
 	} else if time.Now().After(authzGrant.Grant.Expiration) {
 		config.Logger.Error("TX authz grant is expired")
-		context.JSON(http.StatusBadRequest, "failed to verify user address (8)")
+		context.JSON(http.StatusBadRequest, "grant is already expired")
 		return
-	} else if authzGrant.Grant.Expiration.Sub(time.Now()).Hours() >= 24 {
-		config.Logger.Error("TX authz grant", zap.Float64("grant authorization too long", authzGrant.Grant.Expiration.Sub(time.Now()).Hours()))
-		context.JSON(http.StatusBadRequest, "failed to verify user address (9)")
+	} else if secondsUntilGrantExpires >= conf.Authz.MaximumAuthzGrantSeconds {
+		config.Logger.Error("TX authz grant", zap.Float64("grant authorization too far in the future", secondsUntilGrantExpires))
+		context.JSON(http.StatusBadRequest, fmt.Sprintf("grant expiration must be no more than %f seconds", conf.Authz.MaximumAuthzGrantSeconds))
 		return
 	}
 
-	tokenString, err := GenerateJWT(request.Address)
+	tokenString, err := GenerateJWT(authzGrant.Grant.Expiration, request.Address)
 	if err != nil {
 		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 		context.Abort()
@@ -161,9 +162,7 @@ func GenerateToken(context *gin.Context) {
 	context.JSON(http.StatusOK, gin.H{"token": tokenString})
 }
 
-func GenerateJWT(address string) (tokenString string, err error) {
-	expirationTime := time.Now().Add(24 * time.Hour)
-
+func GenerateJWT(expirationTime time.Time, address string) (tokenString string, err error) {
 	claims := &JWTClaim{
 		Address: address,
 		RegisteredClaims: jwt.RegisteredClaims{

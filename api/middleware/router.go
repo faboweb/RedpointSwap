@@ -1,7 +1,6 @@
 package middleware
 
 import (
-	"fmt"
 	"strings"
 	"time"
 
@@ -16,13 +15,9 @@ var Initialized bool
 var HotWalletAddress string
 
 func InitializeRestApi() {
-	logLevel := config.Conf.Api.LogLevel
-	logPath := config.Conf.Api.LogPath
-
-	config.DoConfigureLogger([]string{logPath, "stdout"}, logLevel)
 	config.Logger.Info("Logger start", zap.Time("Init() time", time.Now()))
+	config.Logger.Info("CORS domains", zap.String("Allowed domains", config.Conf.Api.AllowedCORSDomains))
 
-	fmt.Printf("Initializing API with the following CORS domains: %v", config.Conf.Api.AllowedCORSDomains)
 	router, err := initRouter(config.Conf.Api.AllowedCORSDomains)
 	if err != nil {
 		panic("Could not initialize REST API, error " + err.Error())
@@ -51,7 +46,7 @@ func initRouter(allowedCORSDomains string) (*gin.Engine, error) {
 	secured := api.Group("/secured")
 	secured.Use(Auth())
 
-	api.GET("/grantee", AuthzGranteeInfo)
+	api.GET("/grantee", AuthzGranteeInfo) //API endpoint so that clients know what hot wallet to authorize for grants
 	api.POST("/token", GenerateToken)
 	api.POST("/zenith", endpoints.SwapZenith)
 
