@@ -1,0 +1,23 @@
+[jwt]
+secretKey="example-key-do-not-use-this-k3y-1n-producti0n"
+
+[authz]
+maximumAuthzGrantSeconds=86400
+
+[zenith]
+zenithAuctionUrl = "http://api.mekatek.xyz/v0/auction"
+zenithBidUrl = "http://api.mekatek.xyz/v0/bid"
+
+[api]
+logPath = "logs.txt"
+logLevel = "INFO"
+AllowedCORSDomains = "localhost, arb.defiantlabs.net, osmosis-mev.apis.defiantlabs.net"
+defiantTrackingApi = "this_doesn't_exist_yet"
+hotWalletKey = "default"
+keyringBackend = "test"
+chainID = "osmosis-1"
+production = false
+rpc = "https://rpc.osmosis.zone:443"
+key = "arb"
+websocket = "rpc.osmosis.zone:443"
+keyringHomeDir = "/any/path/to/keyring"

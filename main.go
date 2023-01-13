@@ -28,8 +28,9 @@ func main() {
 	logPath := config.Conf.Api.LogPath
 	config.DoConfigureLogger([]string{logPath, "stdout"}, logLevel)
 
+	disallowedExampleSecretKey := "example-key-do-not-use-this-k3y-1n-producti0n"
 	//It is insecure to configure a SHA256 key with less than a 32 byte secret key
-	if len(config.Conf.JWT.SecretKey) < 32 {
+	if len(config.Conf.JWT.SecretKey) < 32 || string(config.Conf.JWT.SecretKey) == disallowedExampleSecretKey {
 		config.Logger.Error("Insecure JWT configuration", zap.Int("Secret key length", len(config.Conf.JWT.SecretKey)))
 		os.Exit(1)
 	}
@@ -54,4 +55,6 @@ func main() {
 		defer close(done)
 		middleware.InitializeRestApi()
 	}()
+
+	<-done
 }

@@ -44,7 +44,7 @@ func ZenithBlockNotificationHandler(lastChainHeight int64, millisecondsBetweenBl
 		if _, ok := zenithBlocks.Load(height); !ok {
 
 			req := &AuctionRequest{
-				ChainID: conf.Zenith.ChainID,
+				ChainID: conf.Api.ChainID,
 				Height:  height,
 			}
 
