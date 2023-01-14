@@ -39,32 +39,14 @@ func SwapAuthz(context *gin.Context) {
 	}
 
 	jwtClaims := claims.(*api.JWTClaim)
-	userAddress := jwtClaims.Subject
+	jwtUserAddress := jwtClaims.Subject
 
 	//Verify the JWT contains a cosmos address (the user who authorized us to submit authz swaps)
-	if !osmosis.IsValidCosmosAddress(userAddress) {
+	if request.UserAddress != jwtUserAddress || !osmosis.IsValidCosmosAddress(jwtUserAddress) {
 		context.JSON(http.StatusBadRequest, gin.H{"error": "invalid jwt provided"})
 		context.Abort()
 		return
 	}
-
-	// TODO:
-	//
-	// Pretty hard to properly validate this request but I'm thinking we should do the following:
-	//
-	// 1) make sure the user's wallet has the requisite funds to do the swap.
-	// 2) make sure the hot wallet has the funds to do the arb swap.
-	// 3) validate that the API's caller is authorized to request swaps on behalf of the user
-	//    NOTE: to do this, we'll have an API endpoint that submits the authz grant,
-	//    and return a JWT once authz is granted. The JWT will be bound to the user,
-	//    via a claim with the user's address in it, and the JWT will be checked by this endpoint.
-	//
-	// config.Logger.Debug("Validating user input (submit authz swap) request)")
-	// errInvalid := ValidateUserInput(&request)
-	// if errInvalid != nil {
-	// 	context.JSON(http.StatusBadRequest, errInvalid.Error())
-	// 	return
-	// }
 
 	txClient, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.Api.Rpc, conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
 	if err != nil {
@@ -74,7 +56,7 @@ func SwapAuthz(context *gin.Context) {
 	}
 
 	//Get user token balances
-	userBalances, err := osmosis.GetAccountBalances(txClient, userAddress)
+	userBalances, err := osmosis.GetAccountBalances(txClient, jwtUserAddress)
 	if err != nil {
 		config.Logger.Error("Failed to look up user account balances", zap.Error(err))
 		context.JSON(http.StatusInternalServerError, "Internal RPC query failed, retry later")
@@ -85,7 +67,7 @@ func SwapAuthz(context *gin.Context) {
 	balanceOk := osmosis.HasTokens(request.SimulatedUserSwap.TokenIn, userBalances)
 	if !balanceOk {
 		config.Logger.Info("Insufficient balance",
-			zap.String("user address", userAddress),
+			zap.String("user address", jwtUserAddress),
 			zap.String("token in", request.SimulatedUserSwap.TokenIn.String()),
 		)
 		context.JSON(http.StatusBadRequest, "Insufficient balance")
@@ -191,6 +173,10 @@ func submitTx(
 	}
 	//txBuilder.SetFeeGranter(txClient.GetFeeGranterAddress())
 	err = tx.Sign(txf, txClient.GetFromName(), txBuilder, true)
+	if err != nil {
+		return nil, err
+	}
+
 	txBytes, err := txClient.TxConfig.TxEncoder()(txBuilder.GetTx())
 	if err != nil {
 		return nil, err
