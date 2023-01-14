@@ -22,12 +22,12 @@ type Config struct {
 
 type jwt struct {
 	SecretKey string
+	Issuer    string //Name of the company running this app, e.g. Defiant Labs
 }
 
 type zenith struct {
 	ZenithAuctionUrl string
 	ZenithBidUrl     string
-	HotWalletKey     string
 }
 
 type authz struct {
@@ -35,17 +35,19 @@ type authz struct {
 }
 
 type api struct {
-	ChainID            string
-	HotWalletKey       string
-	DefiantTrackingApi string //All user and arbitrage trades are POSTed to this HTTP endpoint for invoicing & tracking usage
-	LogPath            string
-	LogLevel           string
-	AllowedCORSDomains string
-	Production         bool   //In production mode, client IPs will be tracked and rate limited
-	KeyringHomeDir     string //This is just a directory where the keyring-backend will be found, you do not need to run a node
-	KeyringBackend     string //Right now this pretty much has to be "test"
-	Rpc                string
-	Websocket          string //this should be something like rpc.osmosis.zone:443 (no protocol prefix)
+	ChainID                 string
+	HotWalletKey            string
+	ArbitrageDenom          string //Right now, only uosmo is supported, so you must set this value to uosmo
+	ArbitrageDenomMinAmount int64  //uosmo is 10^6, so 1000 OSMO == 1000000000
+	DefiantTrackingApi      string //All user and arbitrage trades are POSTed to this HTTP endpoint for invoicing & tracking usage
+	LogPath                 string
+	LogLevel                string
+	AllowedCORSDomains      string
+	Production              bool   //In production mode, client IPs will be tracked and rate limited
+	KeyringHomeDir          string //This is just a directory where the keyring-backend will be found, you do not need to run a node
+	KeyringBackend          string //Right now this pretty much has to be "test"
+	Rpc                     string
+	Websocket               string //this should be something like rpc.osmosis.zone:443 (no protocol prefix)
 }
 
 func DoConfigureLogger(logPath []string, logLevel string) {

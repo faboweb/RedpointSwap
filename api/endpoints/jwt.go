@@ -1,13 +1,13 @@
-package middleware
+package endpoints
 
 import (
 	b64 "encoding/base64"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/config"
 	"github.com/DefiantLabs/RedpointSwap/osmosis"
 	"github.com/cosmos/cosmos-sdk/x/authz"
@@ -25,46 +25,8 @@ type AuthzGranteeResponse struct {
 	GranteeAddress string `json:"authz_grantee"`
 }
 
-var jwtKey []byte
-
-func SetSecretKey(jwtSecret string) {
-	jwtKey = []byte(jwtSecret)
-}
-
-type JWTClaim struct {
-	Address string `json:"address"`
-	jwt.RegisteredClaims
-}
-
-func ValidateToken(signedToken string) (claims *JWTClaim, err error) {
-	token, err := jwt.ParseWithClaims(signedToken, &JWTClaim{}, func(token *jwt.Token) (interface{}, error) {
-		//validate the alg is correct
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-
-		return jwtKey, nil
-	})
-	ok := false
-	claims, ok = token.Claims.(*JWTClaim)
-	if !ok {
-		err = errors.New("couldn't parse claims")
-		return
-	}
-	if ok && token.Valid {
-		if claims.ExpiresAt.Before(time.Now()) {
-			err = errors.New("token expired")
-			return
-		}
-	} else {
-		err = fmt.Errorf("token not valid")
-	}
-
-	return
-}
-
 func AuthzGranteeInfo(context *gin.Context) {
-	context.JSON(http.StatusOK, &AuthzGranteeResponse{GranteeAddress: HotWalletAddress})
+	context.JSON(http.StatusOK, &AuthzGranteeResponse{GranteeAddress: api.HotWalletAddress})
 }
 
 // Verifies a user's identity through a valid, signed authz grant. Note: considering cosmos-sdk/MsgVerifyInvariant instead.
@@ -120,7 +82,7 @@ func GenerateToken(context *gin.Context) {
 		return
 	}
 
-	if authzGrant.Grantee != HotWalletAddress {
+	if authzGrant.Grantee != api.HotWalletAddress {
 		config.Logger.Error("TX grantee", zap.String("cosmos TX", "TX grantee '"+authzGrant.Grantee+"' does not match expected grantee for hot wallet"))
 		context.JSON(http.StatusBadRequest, "failed to verify user address (4)")
 		return
@@ -163,14 +125,16 @@ func GenerateToken(context *gin.Context) {
 }
 
 func GenerateJWT(expirationTime time.Time, address string) (tokenString string, err error) {
-	claims := &JWTClaim{
-		Address: address,
+	claims := &api.JWTClaim{
 		RegisteredClaims: jwt.RegisteredClaims{
+			Subject:   address,
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
+			IssuedAt:  jwt.NewNumericDate(time.Now()),
+			Issuer:    config.Conf.JWT.Issuer,
 		},
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	tokenString, err = token.SignedString(jwtKey)
+	tokenString, err = token.SignedString(api.GetSecretKey())
 	return
 }

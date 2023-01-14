@@ -4,29 +4,23 @@ import (
 	"strings"
 	"time"
 
+	restApi "github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/api/endpoints"
 	"github.com/DefiantLabs/RedpointSwap/config"
-	"github.com/DefiantLabs/RedpointSwap/osmosis"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
 )
-
-var Initialized bool
-var HotWalletAddress string
 
 func InitializeRestApi() {
 	config.Logger.Info("Logger start", zap.Time("Init() time", time.Now()))
 	config.Logger.Info("CORS domains", zap.String("Allowed domains", config.Conf.Api.AllowedCORSDomains))
 
-	router, err := initRouter(config.Conf.Api.AllowedCORSDomains)
-	if err != nil {
-		panic("Could not initialize REST API, error " + err.Error())
-	}
+	router := initRouter(config.Conf.Api.AllowedCORSDomains)
 	router.Run(":80")
-	Initialized = true
+	restApi.Initialized = true
 }
 
-func initRouter(allowedCORSDomains string) (*gin.Engine, error) {
+func initRouter(allowedCORSDomains string) *gin.Engine {
 	allowedDomains := map[string]struct{}{}
 	domains := strings.Split(allowedCORSDomains, ",")
 	for _, domain := range domains {
@@ -46,17 +40,13 @@ func initRouter(allowedCORSDomains string) (*gin.Engine, error) {
 	secured := api.Group("/secured")
 	secured.Use(Auth())
 
-	api.GET("/grantee", AuthzGranteeInfo) //API endpoint so that clients know what hot wallet to authorize for grants
-	api.POST("/token", GenerateToken)
+	api.GET("/grantee", endpoints.AuthzGranteeInfo) //API endpoint so that clients know what hot wallet to authorize for grants
+	api.POST("/token", endpoints.GenerateToken)
 	api.POST("/zenith", endpoints.SwapZenith)
 
 	//Since users do NOT directly sign Authz swap requests, this endpoint is secured with a JWT to prevent abuse
 	secured.POST("/authz", endpoints.SwapAuthz)
-
-	conf := config.Conf
-	addr, err := osmosis.GetKeyAddressForKey(conf.Api.ChainID, conf.Api.Rpc, conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
-	HotWalletAddress = addr
-	return router, err
+	return router
 }
 
 // Returns the origin hostname if found, or empty string otherwise.

@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/api/middleware"
 	"github.com/DefiantLabs/RedpointSwap/config"
 	"github.com/DefiantLabs/RedpointSwap/osmosis"
 	"github.com/DefiantLabs/RedpointSwap/zenith"
+	sdk "github.com/cosmos/cosmos-sdk/types"
 	"go.uber.org/zap"
 )
 
@@ -31,10 +33,38 @@ func main() {
 	disallowedExampleSecretKey := "example-key-do-not-use-this-k3y-1n-producti0n"
 	//It is insecure to configure a SHA256 key with less than a 32 byte secret key
 	if len(config.Conf.JWT.SecretKey) < 32 || string(config.Conf.JWT.SecretKey) == disallowedExampleSecretKey {
-		config.Logger.Error("Insecure JWT configuration", zap.Int("Secret key length", len(config.Conf.JWT.SecretKey)))
-		os.Exit(1)
+		config.Logger.Fatal("Insecure JWT configuration", zap.Int("Secret key length", len(config.Conf.JWT.SecretKey)))
 	}
 
+	//Chain tx and query client
+	txClient, err := osmosis.GetOsmosisTxClient(config.Conf.Api.ChainID, config.Conf.Api.Rpc,
+		config.Conf.Api.KeyringHomeDir, config.Conf.Api.KeyringBackend, config.Conf.Api.HotWalletKey)
+	if err != nil {
+		config.Logger.Fatal("GetOsmosisTxClient", zap.Error(err))
+	}
+
+	//get the bech32 address for the given key
+	addr, err := osmosis.GetKeyAddressForKey(config.Conf.Api.ChainID, config.Conf.Api.Rpc,
+		config.Conf.Api.KeyringHomeDir, config.Conf.Api.KeyringBackend, config.Conf.Api.HotWalletKey)
+	if err != nil {
+		config.Logger.Fatal("GetKeyAddressForKey", zap.Error(err))
+	}
+
+	api.HotWalletAddress = addr
+
+	//Make sure the hot wallet has funds
+	hotWalletBalances, err := osmosis.GetAccountBalances(txClient, config.Conf.Api.HotWalletKey)
+	if err != nil {
+		config.Logger.Fatal("GetAccountBalances", zap.Error(err))
+	}
+
+	arbWalletBalanceRequired := sdk.NewCoin(config.Conf.Api.ArbitrageDenom, sdk.NewInt(config.Conf.Api.ArbitrageDenomMinAmount))
+	arbWalletBalanceActual := osmosis.GetTokenBalance(config.Conf.Api.ArbitrageDenom, hotWalletBalances)
+	if !arbWalletBalanceActual.GTE(arbWalletBalanceRequired.Amount) {
+		config.Logger.Fatal("Hot wallet insufficient balance", zap.String("Required balance", arbWalletBalanceRequired.String()))
+	}
+
+	api.HotWalletArbBalance = arbWalletBalanceActual
 	newBlocks := make(chan int64)
 	done := make(chan struct{})
 

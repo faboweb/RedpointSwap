@@ -1,13 +1,16 @@
 package middleware
 
 import (
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
 	"time"
 
+	"github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/config"
+	"github.com/golang-jwt/jwt/v4"
 
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -64,7 +67,7 @@ func GetClientAuthorizationLevel(clientIP string) (ClientAuthorization, string) 
 
 func PreAuth() gin.HandlerFunc {
 	return func(context *gin.Context) {
-		if !Initialized {
+		if !api.Initialized {
 			config.Logger.Error("App is not initialized")
 			context.JSON(http.StatusInternalServerError, "app is not initialized, contact the system administrator (info@defiantlabs.net) if this error persists")
 			return
@@ -103,14 +106,43 @@ func Auth() gin.HandlerFunc {
 				context.Abort()
 				return
 			}
-			_, err := ValidateToken(tokenString)
+			claims, err := ValidateToken(tokenString)
 			if err != nil {
 				context.JSON(401, gin.H{"error": err.Error()})
 				context.Abort()
 				return
 			}
+
+			context.Set("x-claims-validated", claims)
 		}
 
 		context.Next()
 	}
+}
+
+func ValidateToken(signedToken string) (claims *api.JWTClaim, err error) {
+	token, err := jwt.ParseWithClaims(signedToken, &api.JWTClaim{}, func(token *jwt.Token) (interface{}, error) {
+		//validate the alg is correct
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
+		}
+
+		return api.GetSecretKey(), nil
+	})
+	ok := false
+	claims, ok = token.Claims.(*api.JWTClaim)
+	if !ok {
+		err = errors.New("couldn't parse claims")
+		return
+	}
+	if ok && token.Valid {
+		if claims.ExpiresAt.Before(time.Now()) {
+			err = errors.New("token expired")
+			return
+		}
+	} else {
+		err = fmt.Errorf("token not valid")
+	}
+
+	return
 }
