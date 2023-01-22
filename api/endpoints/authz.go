@@ -19,7 +19,6 @@ import (
 	"go.uber.org/zap"
 )
 
-// TODO: Validation!!! (See below...)
 func SwapAuthz(context *gin.Context) {
 	start := time.Now()
 	conf := config.Conf
@@ -95,7 +94,7 @@ func SwapAuthz(context *gin.Context) {
 
 	end := time.Now()
 	config.Logger.Info("Swap Authz", zap.Duration("time (milliseconds)", end.Sub(start)/time.Millisecond))
-	context.JSON(http.StatusOK, "")
+	context.JSON(http.StatusOK, gin.H{"txhash": res.TxHash})
 }
 
 func buildUserSwap(simulatedUserSwap *api.SimulatedSwap, address string) (types.Msg, error) {
