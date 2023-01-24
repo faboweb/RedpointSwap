@@ -20,6 +20,19 @@ type FutureBlock struct {
 	Auction                *AuctionResponse
 }
 
+func GetZenithBlocks() []*FutureBlock {
+	zBlocks := []*FutureBlock{}
+	zenithBlocks.Range(func(key, val any) bool {
+		zBlock := val.(*FutureBlock)
+		if zBlock.IsZenithBlock {
+			zBlocks = append(zBlocks, zBlock)
+		}
+		return true
+	})
+
+	return zBlocks
+}
+
 // TODO: notify the admin if the Zenith endpoint stops working
 //
 // This function is called for every new block produced on the chain.
@@ -48,7 +61,7 @@ func ZenithBlockNotificationHandler(lastChainHeight int64, millisecondsBetweenBl
 				Height:  height,
 			}
 
-			auctionResp, zenithCode, err := req.getAvailableAuction("http://api.mekatek.xyz/v0/auction")
+			auctionResp, zenithCode, err := req.getAvailableAuction(conf.Zenith.ZenithAuctionUrl)
 
 			//If there was an error or if the auction is too far in the future, we'll need to requery.
 			//Otherwise, the query succeeded and we need to record whether or not this is a Zenith block.
