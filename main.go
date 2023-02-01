@@ -53,7 +53,7 @@ func main() {
 	api.HotWalletAddress = addr
 
 	//Make sure the hot wallet has funds
-	hotWalletBalances, err := osmosis.GetAccountBalances(txClient, config.Conf.Api.HotWalletKey)
+	hotWalletBalances, err := osmosis.GetAccountBalances(txClient, api.HotWalletAddress)
 	if err != nil {
 		config.Logger.Fatal("GetAccountBalances", zap.Error(err))
 	}
@@ -80,11 +80,6 @@ func main() {
 		osmosis.ProcessNewBlock(newBlocks, []func(int64, int64){zenith.ZenithBlockNotificationHandler})
 	}()
 
-	//Initialize the REST API for calculating arbitrage opportunities
-	go func() {
-		defer close(done)
-		middleware.InitializeRestApi()
-	}()
-
+	middleware.InitializeRestApi()
 	<-done
 }
