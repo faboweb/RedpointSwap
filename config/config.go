@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"strings"
 
 	"github.com/BurntSushi/toml"
 	"github.com/imdario/mergo"
@@ -43,11 +44,50 @@ type api struct {
 	LogPath                 string
 	LogLevel                string
 	AllowedCORSDomains      string
+	Port                    string //will default to port 80 if this is not set
 	Production              bool   //In production mode, client IPs will be tracked and rate limited
 	KeyringHomeDir          string //This is just a directory where the keyring-backend will be found, you do not need to run a node
 	KeyringBackend          string //Right now this pretty much has to be "test"
-	Rpc                     string
-	Websocket               string //this should be something like rpc.osmosis.zone:443 (no protocol prefix)
+	RpcSubmitTxEndpoints    string //Nodes where we can SUBMIT Txs. Only certain nodes allow 0 fee TXs. Comma separated.
+	RpcSearchEndpoints      string //Nodes where we can SEARCH Txs. Comma separated.
+	WebsocketEndpoints      string //comma separated. this should be something like rpc.osmosis.zone:443 (no protocol prefix)
+}
+
+var lastWebsocketEndpointIndex = 0
+var lastRpcSubmitEndpointIndex = 0
+var lastRpcSsearchEndpointIndex = 0
+
+// GetApiWebsocketEndpoint Round robin get websocket endpoint
+func (conf *Config) GetApiWebsocketEndpoint() string {
+	eps := strings.Split(conf.Api.WebsocketEndpoints, ",")
+	if lastWebsocketEndpointIndex > len(eps)-1 {
+		lastWebsocketEndpointIndex = 0
+	}
+	currentWse := eps[lastWebsocketEndpointIndex]
+	lastWebsocketEndpointIndex += 1
+	return currentWse
+}
+
+// GetApiRpcSubmitTxEndpoint Round robin get rpc endpoint to submit TXs
+func (conf *Config) GetApiRpcSubmitTxEndpoint() string {
+	eps := strings.Split(conf.Api.RpcSubmitTxEndpoints, ",")
+	if lastRpcSubmitEndpointIndex > len(eps)-1 {
+		lastRpcSubmitEndpointIndex = 0
+	}
+	currentRpc := eps[lastRpcSubmitEndpointIndex]
+	lastRpcSubmitEndpointIndex += 1
+	return currentRpc
+}
+
+// GetApiRpcSearchTxEndpoint Round robin get rpc endpoint to search TXs
+func (conf *Config) GetApiRpcSearchTxEndpoint() string {
+	eps := strings.Split(conf.Api.RpcSubmitTxEndpoints, ",")
+	if lastRpcSubmitEndpointIndex > len(eps)-1 {
+		lastRpcSubmitEndpointIndex = 0
+	}
+	currentRpc := eps[lastRpcSubmitEndpointIndex]
+	lastRpcSubmitEndpointIndex += 1
+	return currentRpc
 }
 
 func DoConfigureLogger(logPath []string, logLevel string) {

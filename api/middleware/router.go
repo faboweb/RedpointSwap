@@ -15,9 +15,21 @@ func InitializeRestApi() {
 	config.Logger.Info("Logger start", zap.Time("Init() time", time.Now()))
 	config.Logger.Info("CORS domains", zap.String("Allowed domains", config.Conf.Api.AllowedCORSDomains))
 
+	port := ":80"
+	if config.Conf.Api.Port != "" {
+		if !strings.HasPrefix(port, ":") {
+			port = ":" + config.Conf.Api.Port
+		} else {
+			port = config.Conf.Api.Port
+		}
+	}
+
 	router := initRouter(config.Conf.Api.AllowedCORSDomains)
-	router.Run(":80")
 	restApi.Initialized = true
+	err := router.Run(port)
+	if err != nil {
+		config.Logger.Fatal("API Run", zap.Error(err))
+	}
 }
 
 func initRouter(allowedCORSDomains string) *gin.Engine {

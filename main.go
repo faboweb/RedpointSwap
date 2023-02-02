@@ -36,15 +36,18 @@ func main() {
 		config.Logger.Fatal("Insecure JWT configuration", zap.Int("Secret key length", len(config.Conf.JWT.SecretKey)))
 	}
 
+	//Initialize the codecs for Osmosis
+	osmosis.Initialize()
+
 	//Chain tx and query client
-	txClient, err := osmosis.GetOsmosisTxClient(config.Conf.Api.ChainID, config.Conf.Api.Rpc,
+	txClient, err := osmosis.GetOsmosisTxClient(config.Conf.Api.ChainID, config.Conf.GetApiRpcSearchTxEndpoint(),
 		config.Conf.Api.KeyringHomeDir, config.Conf.Api.KeyringBackend, config.Conf.Api.HotWalletKey)
 	if err != nil {
 		config.Logger.Fatal("GetOsmosisTxClient", zap.Error(err))
 	}
 
 	//get the bech32 address for the given key
-	addr, err := osmosis.GetKeyAddressForKey(config.Conf.Api.ChainID, config.Conf.Api.Rpc,
+	addr, err := osmosis.GetKeyAddressForKey(config.Conf.Api.ChainID, config.Conf.GetApiRpcSearchTxEndpoint(),
 		config.Conf.Api.KeyringHomeDir, config.Conf.Api.KeyringBackend, config.Conf.Api.HotWalletKey)
 	if err != nil {
 		config.Logger.Fatal("GetKeyAddressForKey", zap.Error(err))
@@ -71,7 +74,7 @@ func main() {
 	//Detect when new blocks are produced on the chain
 	go func() {
 		defer close(done)
-		osmosis.TrackBlocks(config.Conf.Api.Websocket, newBlocks)
+		osmosis.TrackBlocks(config.Conf.GetApiWebsocketEndpoint(), newBlocks)
 	}()
 
 	//Track average time between blocks and notify Zenith when a new block is available
@@ -80,6 +83,10 @@ func main() {
 		osmosis.ProcessNewBlock(newBlocks, []func(int64, int64){zenith.ZenithBlockNotificationHandler})
 	}()
 
-	middleware.InitializeRestApi()
+	go func() {
+		defer close(done)
+		middleware.InitializeRestApi()
+	}()
+
 	<-done
 }

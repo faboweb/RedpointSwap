@@ -10,6 +10,7 @@ import (
 	"github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/config"
 	"github.com/DefiantLabs/RedpointSwap/osmosis"
+	"github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/authz"
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt/v4"
@@ -53,7 +54,14 @@ func GenerateToken(context *gin.Context) {
 		return
 	}
 
-	txClient, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.Api.Rpc, conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
+	txClientSubmit, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.GetApiRpcSubmitTxEndpoint(), conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
+	if err != nil {
+		config.Logger.Error("GetOsmosisTxClient", zap.Error(err))
+		context.JSON(http.StatusBadRequest, "server misconfiguration (query client error), please notify administrator")
+		return
+	}
+
+	txClientSearch, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.GetApiRpcSearchTxEndpoint(), conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
 	if err != nil {
 		config.Logger.Error("GetOsmosisTxClient", zap.Error(err))
 		context.JSON(http.StatusBadRequest, "server misconfiguration (query client error), please notify administrator")
@@ -61,14 +69,41 @@ func GenerateToken(context *gin.Context) {
 	}
 
 	//RPC request to check the TX. Will check signature as well.
-	checkTxResp, err := txClient.BroadcastTxSync(txBytes)
+	checkTxResp, err := txClientSubmit.BroadcastTxSync(txBytes)
 	if err != nil || checkTxResp == nil {
 		config.Logger.Error("BroadcastTxSync", zap.Error(err))
 		context.JSON(http.StatusBadRequest, "failed to verify user address (1)")
 		return
+	} else if checkTxResp.Code != 0 {
+		config.Logger.Error("BroadcastTxSync", zap.Uint32("TX code", checkTxResp.Code))
+		context.JSON(http.StatusBadRequest, "TX error code: "+fmt.Sprint(checkTxResp.Code))
+		return
 	}
 
-	userTx := checkTxResp.GetTx()
+	//Wait at most two blocks for the TX
+	resp, err := osmosis.AwaitTx(txClientSearch, checkTxResp.TxHash, time.Second*13)
+	if err != nil {
+		//Try a different RPC endpoint
+		txClientSearch, err = osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.GetApiRpcSearchTxEndpoint(), conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
+		if err != nil {
+			config.Logger.Error("GetOsmosisTxClient", zap.Error(err))
+			context.JSON(http.StatusBadRequest, "server misconfiguration (query client error), please notify administrator")
+			return
+		}
+
+		//Don't wait long since we already waited two blocks for the TX (this is just to search on a diff node)
+		resp, err = osmosis.AwaitTx(txClientSearch, checkTxResp.TxHash, time.Second*2)
+		if err != nil {
+			config.Logger.Error("AwaitTx", zap.Error(err))
+			context.JSON(http.StatusBadRequest, "failed to verify user address (7)")
+			return
+		}
+	}
+
+	var userTx types.Tx
+	codec := osmosis.GetCodec()
+	codec.InterfaceRegistry.UnpackAny(resp.GetTxResponse().Tx, &userTx)
+
 	if userTx == nil || len(userTx.GetMsgs()) != 1 {
 		context.JSON(http.StatusBadRequest, "failed to verify user address (2)")
 		return
@@ -86,7 +121,7 @@ func GenerateToken(context *gin.Context) {
 		config.Logger.Error("TX grantee", zap.String("cosmos TX", "TX grantee '"+authzGrant.Grantee+"' does not match expected grantee for hot wallet"))
 		context.JSON(http.StatusBadRequest, "failed to verify user address (4)")
 		return
-	} else if !strings.HasPrefix("osmo", authzGrant.Granter) {
+	} else if !strings.HasPrefix(authzGrant.Granter, "osmo") {
 		config.Logger.Error("TX is not an authz grant", zap.String("cosmos TX", "Invalid granter"))
 		context.JSON(http.StatusBadRequest, "failed to verify user address (5)")
 		return

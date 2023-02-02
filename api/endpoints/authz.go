@@ -47,7 +47,7 @@ func SwapAuthz(context *gin.Context) {
 		return
 	}
 
-	txClient, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.Api.Rpc, conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
+	txClient, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.GetApiRpcSubmitTxEndpoint(), conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
 	if err != nil {
 		config.Logger.Error("GetOsmosisTxClient", zap.Error(err))
 		context.JSON(http.StatusInternalServerError, "server misconfiguration (query client error), please notify administrator")

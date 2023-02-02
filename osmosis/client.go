@@ -13,14 +13,16 @@ import (
 	txTypes "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/types/tx/signing"
 	authTypes "github.com/cosmos/cosmos-sdk/x/auth/types"
-	osmosisApp "github.com/osmosis-labs/osmosis/v13/app"
-	osmosisParams "github.com/osmosis-labs/osmosis/v13/app/params"
 )
 
-var encodingConfig osmosisParams.EncodingConfig
+var osmosisCodec Codec
 
 func Initialize() {
-	encodingConfig = osmosisApp.MakeEncodingConfig()
+	osmosisCodec = MakeCodec()
+}
+
+func GetCodec() Codec {
+	return osmosisCodec
 }
 
 func GetKeyAddressForKey(chain string, node string, osmosisHomeDir string, keyringBackend string, key string) (string, error) {
@@ -71,14 +73,14 @@ func GetOsmosisTxClient(chain string, node string, osmosisHomeDir string, keyrin
 		return clientCtx, err
 	}
 
-	clientCtx = clientCtx.WithCodec(encodingConfig.Marshaler).
+	clientCtx = clientCtx.WithCodec(osmosisCodec.Marshaler).
 		WithChainID(chain).
 		WithFrom(fromFlag).
 		WithFromAddress(fromAddr).
 		WithFromName(fromName).
-		WithInterfaceRegistry(encodingConfig.InterfaceRegistry).
-		WithTxConfig(encodingConfig.TxConfig).
-		WithLegacyAmino(encodingConfig.Amino).
+		WithInterfaceRegistry(osmosisCodec.InterfaceRegistry).
+		WithTxConfig(osmosisCodec.TxConfig).
+		WithLegacyAmino(osmosisCodec.Amino).
 		WithInput(os.Stdin).
 		WithAccountRetriever(authTypes.AccountRetriever{}).
 		WithBroadcastMode(flags.BroadcastAsync).
@@ -159,7 +161,7 @@ func AwaitTx(clientCtx client.Context, txHash string, timeout time.Duration) (*t
 	var txByHash *txTypes.GetTxResponse
 	var txLookupErr error
 	startTime := time.Now()
-	timeBetweenQueries := 100
+	timeBetweenQueries := 1000
 
 	txClient := txTypes.NewServiceClient(clientCtx)
 
