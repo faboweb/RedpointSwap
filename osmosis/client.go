@@ -93,7 +93,7 @@ func GetOsmosisTxClient(chain string, node string, osmosisHomeDir string, keyrin
 	return clientCtx, nil
 }
 
-func SignSubmitTx(clientCtx client.Context, msgs []sdk.Msg, gas uint64) (*sdk.TxResponse, error) {
+func SignTx(clientCtx client.Context, msgs []sdk.Msg, gas uint64) ([]byte, error) {
 	txf := BuildTxFactory(clientCtx, gas)
 	txf, txfErr := PrepareFactory(clientCtx, clientCtx.GetFromName(), txf)
 	if txfErr != nil {
@@ -112,11 +112,14 @@ func SignSubmitTx(clientCtx client.Context, msgs []sdk.Msg, gas uint64) (*sdk.Tx
 		return nil, err
 	}
 
-	txBytes, err := clientCtx.TxConfig.TxEncoder()(txBuilder.GetTx())
+	return clientCtx.TxConfig.TxEncoder()(txBuilder.GetTx())
+}
+
+func SignSubmitTx(clientCtx client.Context, msgs []sdk.Msg, gas uint64) (*sdk.TxResponse, error) {
+	txBytes, err := SignTx(clientCtx, msgs, gas)
 	if err != nil {
 		return nil, err
 	}
-
 	return clientCtx.BroadcastTxSync(txBytes)
 }
 
@@ -182,8 +185,25 @@ func AwaitTx(clientCtx client.Context, txHash string, timeout time.Duration) (*t
 	return txByHash, nil
 }
 
+// We assume gasPrices is set to .005 uosmo. This will not work for other denoms.
 func GetGasFee(numRoutes int) uint64 {
-	return uint64(numRoutes * 200000)
+	switch numRoutes {
+	case 2:
+		return 275000
+	case 3:
+		return 275000
+	case 4:
+		return 410000
+	//The simulator never presents routes longer than 4 at present as there is no need
+	case 5:
+		return 410000
+		// case 6:
+		// 	return 492000
+		// case 7:
+		// 	return 574000
+	}
+
+	return 0
 }
 
 var (

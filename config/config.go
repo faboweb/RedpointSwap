@@ -29,6 +29,8 @@ type jwt struct {
 type zenith struct {
 	ZenithAuctionUrl string
 	ZenithBidUrl     string
+	MaximumBidAmount string  //Any valid Coin. Denom MUST match the zenith bid denom. This will cap the BidPercentage (see below).
+	BidPercentage    float64 //Float percentage of the arb profits that will be bid. Example: if arb profits are estimated as 10 OSMO, 0.1 will be 1 OSMO
 }
 
 type authz struct {

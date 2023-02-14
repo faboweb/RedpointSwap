@@ -1,7 +1,6 @@
 package endpoints
 
 import (
-	"errors"
 	"fmt"
 	"net/http"
 	"time"
@@ -10,7 +9,6 @@ import (
 	"github.com/DefiantLabs/RedpointSwap/config"
 	"github.com/DefiantLabs/RedpointSwap/osmosis"
 	"github.com/cosmos/cosmos-sdk/client"
-	"github.com/cosmos/cosmos-sdk/client/tx"
 	ctypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/types"
 	"github.com/cosmos/cosmos-sdk/x/authz"
@@ -97,7 +95,7 @@ func SwapAuthz(context *gin.Context) {
 	context.JSON(http.StatusOK, gin.H{"txhash": res.TxHash})
 }
 
-func buildUserSwap(simulatedUserSwap *api.SimulatedSwap, address string) (types.Msg, error) {
+func buildUserSwap(simulatedUserSwap *api.SimulatedSwap, address string) types.Msg {
 	tokenIn := simulatedUserSwap.TokenIn
 	tokenOutMinAmt := simulatedUserSwap.TokenOutMinAmount
 	routes := simulatedUserSwap.Routes
@@ -110,48 +108,6 @@ func buildUserSwap(simulatedUserSwap *api.SimulatedSwap, address string) (types.
 	return osmosis.BuildSwapExactAmountIn(tokenIn, tokenOutMinAmt, routes, address)
 }
 
-func buildArbitrageSwap(txClient client.Context, simulatedArbSwap *api.SimulatedSwap) ([]types.Msg, error) {
-	arbs := []types.Msg{}
-	amountRemaining := simulatedArbSwap.TokenIn.Amount
-	totalMsgs := 0
-	arbWalletBalance := api.HotWalletArbBalance
-	routes := simulatedArbSwap.Routes
-
-	if len(routes) == 0 {
-		return nil, errors.New("no arbitrage routes in request")
-	} else if routes[len(routes)-1].TokenOutDenom != simulatedArbSwap.TokenIn.Denom { //Verify that the token denom in matches the last route's denom out (arb trade)
-		lastRouteOutDenom := routes[len(routes)-1].TokenOutDenom
-		config.Logger.Error("Invalid arbitrage trade",
-			zap.String("token in", simulatedArbSwap.TokenIn.String()),
-			zap.String("last route out denom", lastRouteOutDenom),
-		)
-		return nil, fmt.Errorf("invalid arbitrage trade, token in %s does not match denom out %s", simulatedArbSwap.TokenIn.String(), lastRouteOutDenom)
-	}
-
-	fmt.Printf("Authz requested with arbitrage swap: Token in: %s. Pool(s) %s.\n", simulatedArbSwap.TokenIn.String(), simulatedArbSwap.Pools)
-
-	for amountRemaining.GT(types.ZeroInt()) && totalMsgs < 25 {
-		tokenIn := types.NewCoin(simulatedArbSwap.TokenIn.Denom, amountRemaining)
-		if amountRemaining.GT(arbWalletBalance) {
-			tokenIn.Amount = arbWalletBalance
-		}
-
-		amountRemaining = amountRemaining.Sub(tokenIn.Amount)
-
-		//Note that the minimum amount out is the same as token in. This prevents swaps where the hot wallet loses funds (excluding fees)
-		tokenOutMinAmt := tokenIn.Amount
-		arbSwap, err := osmosis.BuildSwapExactAmountIn(tokenIn, tokenOutMinAmt, routes, txClient.GetFromAddress().String())
-		if err != nil {
-			return nil, err
-		}
-
-		arbs = append(arbs, arbSwap)
-		totalMsgs += 1
-	}
-
-	return arbs, nil
-}
-
 func getGasFee(numRoutes int) uint64 {
 	return uint64(numRoutes * 200000)
 }
@@ -161,22 +117,7 @@ func submitTx(
 	msgs []types.Msg,
 	txGas uint64,
 ) (*types.TxResponse, error) {
-	txf := osmosis.BuildTxFactory(txClient, txGas)
-	txf, txfErr := osmosis.PrepareFactory(txClient, txClient.GetFromName(), txf)
-	if txfErr != nil {
-		return nil, txfErr
-	}
-	txBuilder, err := tx.BuildUnsignedTx(txf, msgs...)
-	if err != nil {
-		return nil, err
-	}
-	//txBuilder.SetFeeGranter(txClient.GetFeeGranterAddress())
-	err = tx.Sign(txf, txClient.GetFromName(), txBuilder, true)
-	if err != nil {
-		return nil, err
-	}
-
-	txBytes, err := txClient.TxConfig.TxEncoder()(txBuilder.GetTx())
+	txBytes, err := osmosis.GetSignedTx(txClient, msgs, txGas)
 	if err != nil {
 		return nil, err
 	}
@@ -188,10 +129,7 @@ func buildSwaps(
 	swapRequest api.SimulatedSwapResult,
 ) (msgs []types.Msg, gasNeeded uint64, err error) {
 	msgs = []types.Msg{}
-	msgUserSwap, err := buildUserSwap(swapRequest.SimulatedUserSwap, swapRequest.UserAddress)
-	if err != nil {
-		return nil, 0, err
-	}
+	msgUserSwap := buildUserSwap(swapRequest.SimulatedUserSwap, swapRequest.UserAddress)
 
 	swapMsg := msgUserSwap.(*gamm.MsgSwapExactAmountIn)
 	userSwapMsgBytes, mErr := swapMsg.Marshal()
@@ -211,7 +149,10 @@ func buildSwaps(
 	// It wouldn't make a lot of sense to use the authz request endpoint if there isn't arbitrage.
 	// However, it is allowed to do so.
 	if swapRequest.HasArbitrageOpportunity {
-		arbSwaps, err := buildArbitrageSwap(txClient, swapRequest.ArbitrageSwap.SimulatedSwap)
+		fmt.Printf("Authz requested with arbitrage swap: Token in: %s. Pool(s) %s.\n",
+			swapRequest.ArbitrageSwap.SimulatedSwap.TokenIn.String(), swapRequest.ArbitrageSwap.SimulatedSwap.Pools)
+
+		arbSwaps, err := osmosis.BuildArbitrageSwap(txClient, swapRequest.ArbitrageSwap.SimulatedSwap)
 		if err != nil {
 			return nil, 0, err
 		}

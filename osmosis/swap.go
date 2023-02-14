@@ -5,14 +5,12 @@ import (
 	"github.com/osmosis-labs/osmosis/v13/x/gamm/types"
 )
 
-func BuildSwapExactAmountIn(tokenIn cosmosSdk.Coin, tokenOutMinAmt cosmosSdk.Int, routes []types.SwapAmountInRoute, address string) (cosmosSdk.Msg, error) {
+func BuildSwapExactAmountIn(tokenIn cosmosSdk.Coin, tokenOutMinAmt cosmosSdk.Int, routes []types.SwapAmountInRoute, address string) cosmosSdk.Msg {
 
-	msg := &types.MsgSwapExactAmountIn{
+	return &types.MsgSwapExactAmountIn{
 		Sender:            address,
 		Routes:            routes,
 		TokenIn:           tokenIn,
 		TokenOutMinAmount: tokenOutMinAmt,
 	}
-
-	return msg, nil
 }

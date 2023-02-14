@@ -7,6 +7,8 @@ maximumAuthzGrantSeconds=86400
 [zenith]
 zenithAuctionUrl = "http://api.mekatek.xyz/v0/auction"
 zenithBidUrl = "http://api.mekatek.xyz/v0/bid"
+maximumBidAmount = "100000uosmo" # Can be any valid Coin. Note that the denom MUST match the zenith bid denom. This will cap the bidPercentage (see below).
+bidPercentage = 0.1 # Float percentage of the arb profits that will be bid. Example: if arb profits are estimated as 10 OSMO, 0.1 will be 1 OSMO
 
 [api]
 logPath = "logs.txt"
