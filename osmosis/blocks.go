@@ -36,6 +36,7 @@ type TendermintNewBlockHeader struct {
 
 func AwaitBlocks(wssHost string, height chan int64, exitAfterFails int) {
 	fails := 0
+	fmt.Printf("wsshost: %s\n", wssHost)
 
 	//Open websocket connection to get notified on each new block publish
 	subscribeMsg := "{\"jsonrpc\": \"2.0\",\"method\": \"subscribe\",\"id\": 1,\"params\": {\"query\": \"tm.event='NewBlockHeader'\"}}"
