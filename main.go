@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/api/middleware"
 	"github.com/DefiantLabs/RedpointSwap/config"
 	"github.com/DefiantLabs/RedpointSwap/osmosis"
@@ -79,7 +80,7 @@ func main() {
 	//Track average time between blocks and notify Zenith when a new block is available
 	go func() {
 		defer close(done)
-		osmosis.ProcessNewBlock(newBlocks, []func(int64, int64){zenith.ZenithBlockNotificationHandler})
+		osmosis.ProcessNewBlock(newBlocks, []func(int64, int64){zenith.ZenithBlockNotificationHandler, api.ArbitrageBlockNotificationHandler})
 	}()
 
 	go func() {
