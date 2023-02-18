@@ -8,10 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type StatusRequest struct {
-	Id string `json:"id"`
-}
-
 type TradeStatus struct {
 	Error               string //if there is some error getting status for the ID
 	UserTxStatus        string
@@ -21,13 +17,12 @@ type TradeStatus struct {
 }
 
 func GetTradeStatus(context *gin.Context) {
-	var request StatusRequest
-	if err := context.ShouldBindJSON(&request); err != nil {
-		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
-		context.Abort()
+	id := context.Request.URL.Query().Get("id")
+	if id == "" {
+		context.JSON(http.StatusOK, gin.H{"error": "empty id provided"})
 		return
 	}
-	ats, err := api.GetStatusForSubmittedTxs(request.Id)
+	ats, err := api.GetStatusForSubmittedTxs(id)
 	if err != nil {
 		context.JSON(http.StatusOK, &TradeStatus{Error: err.Error()})
 		return
