@@ -3,10 +3,13 @@ package endpoints
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"time"
 
+	"github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/config"
+	"github.com/DefiantLabs/RedpointSwap/osmosis"
 	"github.com/DefiantLabs/RedpointSwap/zenith"
 	"github.com/gin-gonic/gin"
 	"go.uber.org/zap"
@@ -20,7 +23,14 @@ func SwapZenith(context *gin.Context) {
 		return
 	}
 
-	bidTxs, err := zenith.PlaceBid(req)
+	conf := config.Conf
+	txClient, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.GetApiRpcSubmitTxEndpoint(), conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
+	if err != nil {
+		context.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	bidTxs, txBytes, err := zenith.PlaceBid(req, txClient)
 	if err != nil {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -60,8 +70,14 @@ func SwapZenith(context *gin.Context) {
 	var bidResponse zenith.BidResponse
 	err = json.NewDecoder(resp.Body).Decode(&bidResponse)
 	if err != nil {
-		context.JSON(resp.StatusCode, gin.H{"error": "failed to decode response from zenith api"})
-		return
+		fmt.Println("failed to decode response from zenith api")
+	} else {
+		id, err := api.AddTxSet(txBytes, &req.SimulatedSwap, txClient.TxConfig.TxDecoder(), "Zenith", req.SimulatedSwap.UserAddress, config.HotWalletAddress)
+		if err != nil {
+			fmt.Println("Tracking info may be unavailable for TX set due to unexpected error " + err.Error())
+		} else {
+			bidResponse.Id = id
+		}
 	}
 
 	end := time.Now()

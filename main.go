@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/api/middleware"
 	"github.com/DefiantLabs/RedpointSwap/config"
 	"github.com/DefiantLabs/RedpointSwap/osmosis"
@@ -53,10 +52,10 @@ func main() {
 		config.Logger.Fatal("GetKeyAddressForKey", zap.Error(err))
 	}
 
-	api.HotWalletAddress = addr
+	config.HotWalletAddress = addr
 
 	//Make sure the hot wallet has funds
-	hotWalletBalances, err := osmosis.GetAccountBalances(txClient, api.HotWalletAddress)
+	hotWalletBalances, err := osmosis.GetAccountBalances(txClient, config.HotWalletAddress)
 	if err != nil {
 		config.Logger.Fatal("GetAccountBalances", zap.Error(err))
 	}
@@ -67,7 +66,7 @@ func main() {
 		config.Logger.Fatal("Hot wallet insufficient balance", zap.String("Required balance", arbWalletBalanceRequired.String()))
 	}
 
-	api.HotWalletArbBalance = arbWalletBalanceActual
+	config.HotWalletArbBalance = arbWalletBalanceActual
 	newBlocks := make(chan int64)
 	done := make(chan struct{})
 

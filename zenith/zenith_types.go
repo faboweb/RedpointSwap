@@ -43,6 +43,7 @@ type BidResponse struct {
 	Height   int64    `json:"height"`
 	Kind     string   `json:"kind,omitempty"` //either top or block, leave empty for top
 	TxHashes []string `json:"tx_hashes"`      //tx hashes
+	Id       string   //ID to look up status later
 }
 
 func (ar *AuctionResponse) Validate() bool {

@@ -81,7 +81,7 @@ func SwapAuthz(context *gin.Context) {
 		return
 	}
 
-	res, err := submitTx(txClient, msgs, gas)
+	res, txB, err := submitTx(txClient, msgs, gas)
 	if err != nil && res == nil {
 		context.JSON(http.StatusBadRequest, "failed to submit trade via RPC")
 		return
@@ -90,9 +90,14 @@ func SwapAuthz(context *gin.Context) {
 		return
 	}
 
+	id, err := api.AddTxSet([][]byte{txB}, &request, txClient.TxConfig.TxDecoder(), "Zenith", request.UserAddress, config.HotWalletAddress)
+	if err != nil {
+		fmt.Println("Tracking info may be unavailable for TX set due to unexpected error " + err.Error())
+	}
+
 	end := time.Now()
 	config.Logger.Info("Swap Authz", zap.Duration("time (milliseconds)", end.Sub(start)/time.Millisecond))
-	context.JSON(http.StatusOK, gin.H{"txhash": res.TxHash})
+	context.JSON(http.StatusOK, gin.H{"id": id})
 }
 
 func buildUserSwap(simulatedUserSwap *api.SimulatedSwap, address string) types.Msg {
@@ -116,12 +121,13 @@ func submitTx(
 	txClient client.Context,
 	msgs []types.Msg,
 	txGas uint64,
-) (*types.TxResponse, error) {
+) (*types.TxResponse, []byte, error) {
 	txBytes, err := osmosis.GetSignedTx(txClient, msgs, txGas)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return txClient.BroadcastTxSync(txBytes)
+	r, e := txClient.BroadcastTxSync(txBytes)
+	return r, txBytes, e
 }
 
 func buildSwaps(
@@ -152,7 +158,7 @@ func buildSwaps(
 		fmt.Printf("Authz requested with arbitrage swap: Token in: %s. Pool(s) %s.\n",
 			swapRequest.ArbitrageSwap.SimulatedSwap.TokenIn.String(), swapRequest.ArbitrageSwap.SimulatedSwap.Pools)
 
-		arbSwaps, err := osmosis.BuildArbitrageSwap(txClient, swapRequest.ArbitrageSwap.SimulatedSwap)
+		arbSwaps, err := osmosis.BuildArbitrageSwap(txClient, swapRequest.ArbitrageSwap.SimulatedSwap.TokenIn, swapRequest.ArbitrageSwap.SimulatedSwap.Routes)
 		if err != nil {
 			return nil, 0, err
 		}

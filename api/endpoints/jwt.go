@@ -27,7 +27,7 @@ type AuthzGranteeResponse struct {
 }
 
 func AuthzGranteeInfo(context *gin.Context) {
-	context.JSON(http.StatusOK, &AuthzGranteeResponse{GranteeAddress: api.HotWalletAddress})
+	context.JSON(http.StatusOK, &AuthzGranteeResponse{GranteeAddress: config.HotWalletAddress})
 }
 
 // Verifies a user's identity through a valid, signed authz grant. Note: considering cosmos-sdk/MsgVerifyInvariant instead.
@@ -117,7 +117,7 @@ func GenerateToken(context *gin.Context) {
 		return
 	}
 
-	if authzGrant.Grantee != api.HotWalletAddress {
+	if authzGrant.Grantee != config.HotWalletAddress {
 		config.Logger.Error("TX grantee", zap.String("cosmos TX", "TX grantee '"+authzGrant.Grantee+"' does not match expected grantee for hot wallet"))
 		context.JSON(http.StatusBadRequest, "failed to verify user address (4)")
 		return

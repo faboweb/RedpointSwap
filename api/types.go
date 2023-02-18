@@ -1,13 +1,10 @@
 package api
 
 import (
-	sdk "github.com/cosmos/cosmos-sdk/types"
 	"github.com/golang-jwt/jwt/v4"
 )
 
 var Initialized bool
-var HotWalletAddress string
-var HotWalletArbBalance sdk.Int
 
 type JWTClaim struct {
 	jwt.RegisteredClaims

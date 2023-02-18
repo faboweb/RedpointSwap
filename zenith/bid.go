@@ -24,6 +24,11 @@ func IsZenithEligible(simResult api.SimulatedSwapResult, txClient cosmosClient.C
 	zenithFeeInt cosmosSdk.Int,
 	err error,
 ) {
+	if !simResult.HasArbitrageOpportunity || (simResult.ArbitrageSwap.SimulatedSwap.TokenIn.Denom != simResult.ArbitrageSwap.SimulatedSwap.TokenOutDenom) {
+		err = errors.New("bad request (arbitrage params invalid) -- do not submit TX with Zenith")
+		return
+	}
+
 	conf := config.Conf
 
 	arbTokenIn := simResult.ArbitrageSwap.SimulatedSwap.TokenIn
@@ -37,18 +42,18 @@ func IsZenithEligible(simResult api.SimulatedSwapResult, txClient cosmosClient.C
 	}
 
 	estimatedAmountOut := simResult.ArbitrageSwap.SimulatedSwap.TokenOutAmount.ToDec()
-	estimatedArbProfit := estimatedAmountOut.Sub(arbTokenIn.Amount.ToDec())
+	estimatedArbRevenue := estimatedAmountOut.Sub(arbTokenIn.Amount.ToDec())
 	asF := strconv.FormatFloat(conf.Zenith.BidPercentage, 'f', 6, 64)
 	zenithBidPercent, err := cosmosSdk.NewDecFromStr(asF)
 	if err != nil {
 		err = errors.New("server misconfiguration (zenith bid percentage), please notify administrator")
 		return
-	} else if estimatedArbProfit.LTE(cosmosSdk.ZeroDec()) {
+	} else if estimatedArbRevenue.LTE(cosmosSdk.ZeroDec()) {
 		err = errors.New("arbitrage not profitable")
 		return
 	}
 
-	zenithFee := estimatedArbProfit.Mul(zenithBidPercent)
+	zenithFee := estimatedArbRevenue.Mul(zenithBidPercent)
 	if zenithFee.GT(maxBid.Amount.ToDec()) {
 		zenithFee = maxBid.Amount.ToDec()
 	}
@@ -58,17 +63,22 @@ func IsZenithEligible(simResult api.SimulatedSwapResult, txClient cosmosClient.C
 		return
 	}
 
-	arbSwaps, err = osmosis.BuildArbitrageSwap(txClient, simResult.ArbitrageSwap.SimulatedSwap)
+	var gasFee uint64
+	gasFee, err = osmosis.EstimateArbGas(simResult.ArbitrageSwap.SimulatedSwap.TokenIn, simResult.ArbitrageSwap.SimulatedSwap.Routes)
 	if err != nil {
-		err = errors.New("issue building arbitrage swap")
 		return
 	}
 
-	gasFee := osmosis.GetGasFee(len(simResult.ArbitrageSwap.SimulatedSwap.Routes) * len(arbSwaps))
 	gasFeeInt = cosmosSdk.NewIntFromUint64(gasFee)
 	gasFeeUosmo := gasFeeInt.Quo(cosmosSdk.NewInt(200)) //equivalent of dividing by .005, which is the gasPrice amount
 	if gasFeeInt.Equal(cosmosSdk.ZeroInt()) {
 		err = errors.New("arbitrage swap must have 2-5 routes")
+		return
+	}
+
+	arbSwaps, err = osmosis.BuildArbitrageSwap(txClient, simResult.ArbitrageSwap.SimulatedSwap.TokenIn, simResult.ArbitrageSwap.SimulatedSwap.Routes)
+	if err != nil {
+		err = errors.New("issue building arbitrage swap")
 		return
 	}
 
@@ -81,34 +91,29 @@ func IsZenithEligible(simResult api.SimulatedSwapResult, txClient cosmosClient.C
 		err = errors.New("not zenith eligible (unprofitable)")
 	}
 
-	//arbMinAmountOut = arbMinOutDec.TruncateInt()
 	return
 }
 
-func PlaceBid(req BidRequest) ([]string, error) {
-	conf := config.Conf
-
-	txClient, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.GetApiRpcSubmitTxEndpoint(), conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
-	if err != nil {
-		return nil, errors.New("server misconfiguration (query client error), please notify administrator")
-	}
+func PlaceBid(req BidRequest, txClient cosmosClient.Context) ([]string, [][]byte, error) {
+	txs := [][]byte{}
 
 	// The hot wallet will protect itself by only submitting bids in a way that guarantees profits (e.g. arb profits > bid amount)
 	// This also considers many other factors such as gas fees
 	arbSwaps, gasFeeInt, zenithFeeInt, err := IsZenithEligible(req.SimulatedSwap, txClient)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 
 	userTxBytes, err := b64.StdEncoding.DecodeString(req.SwapTx)
 	if err != nil {
-		return nil, errors.New("provided user tx must be base 64 encoded")
+		return nil, nil, errors.New("provided user tx must be base 64 encoded")
 	}
+	txs = append(txs, userTxBytes)
 
 	decoder := txClient.TxConfig.TxDecoder()
 	osmosisTx, err := decoder(userTxBytes)
 	if err != nil {
-		return nil, errors.New("TX must be a valid Osmosis TX")
+		return nil, nil, errors.New("TX must be a valid Osmosis TX")
 	}
 
 	//Whether or not the Bid was submitted with a signed user TX that matches the arbitrage simulator (e.g. the simulator simulated this TX).
@@ -133,41 +138,41 @@ func PlaceBid(req BidRequest) ([]string, error) {
 	}
 
 	if !userTxMatchesSimulation {
-		return nil, errors.New("TX ineligible for arbitrage (will not be submitted to Zenith)")
+		return nil, nil, errors.New("TX ineligible for arbitrage (will not be submitted to Zenith)")
 	}
 
 	bidTxs := []string{req.SwapTx}
 	zenithFeeUosmo, err := zenithFeeInt.ToDec().Float64()
 	if err != nil {
-		return nil, errors.New("unexpected zenith fee value")
+		return nil, nil, errors.New("unexpected zenith fee value")
 	}
 
-	hotWalletTxMsgs := []cosmosSdk.Msg{}
-	hotWalletTxMsgs = append(hotWalletTxMsgs, arbSwaps...)
+	hotWalletTxMsgs := arbSwaps
 
 	total := 0.0
 	for _, payment := range req.Payments {
 		if payment.Denom != "uosmo" {
-			return nil, fmt.Errorf("app only supports uosmo payments, but zenith auction requires %s", payment.Denom)
+			return nil, nil, fmt.Errorf("app only supports uosmo payments, but zenith auction requires %s", payment.Denom)
 		}
 
 		total += payment.Allocation
 		fee := zenithFeeUosmo * payment.Allocation
 		feeCoin := cosmosSdk.NewCoin("uosmo", cosmosSdk.NewInt(int64(math.Trunc(fee))))
-		msgZenithPayment := &bankTypes.MsgSend{FromAddress: api.HotWalletAddress, ToAddress: payment.Address, Amount: []cosmosSdk.Coin{feeCoin}}
+		msgZenithPayment := &bankTypes.MsgSend{FromAddress: config.HotWalletAddress, ToAddress: payment.Address, Amount: []cosmosSdk.Coin{feeCoin}}
 		hotWalletTxMsgs = append(hotWalletTxMsgs, msgZenithPayment)
 	}
 
 	if total != 1.0 {
-		return nil, errors.New("zenith auction payments don't equal 1.0")
+		return nil, nil, errors.New("zenith auction payments don't equal 1.0")
 	}
 
 	zenithTxBytes, err := osmosis.GetSignedTx(txClient, hotWalletTxMsgs, gasFeeInt.Uint64())
 	if err != nil {
-		return nil, errors.New("problem signing zenith arbitrage & payments TXs")
+		return nil, nil, errors.New("problem signing zenith arbitrage & payments TXs")
 	}
 
+	txs = append(txs, zenithTxBytes)
 	zenithTxB64 := b64.StdEncoding.EncodeToString(zenithTxBytes)
 	bidTxs = append(bidTxs, zenithTxB64)
-	return bidTxs, nil
+	return bidTxs, txs, nil
 }
