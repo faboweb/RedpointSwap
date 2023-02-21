@@ -22,19 +22,22 @@ func GetTradeStatus(context *gin.Context) {
 		context.JSON(http.StatusOK, gin.H{"error": "empty id provided"})
 		return
 	}
-	ats, err := api.GetStatusForSubmittedTxs(id)
-	if err != nil {
-		context.JSON(http.StatusOK, &TradeStatus{Error: err.Error()})
-		return
-	}
 
 	zenithQueued := api.IsZenithQueued(id)
-	var ts TradeStatus
+	ts := TradeStatus{
+		UserTxStatus: "trade not found (did it expire?)",
+	}
+
 	if zenithQueued {
 		ts = TradeStatus{
 			UserTxStatus: "Waiting for Zenith block",
 		}
 	} else {
+		ats, err := api.GetStatusForSubmittedTxs(id)
+		if err != nil {
+			context.JSON(http.StatusOK, ts)
+			return
+		}
 		ts = convertToStatus(ats)
 	}
 	context.JSON(http.StatusOK, ts)
