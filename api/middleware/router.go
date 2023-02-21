@@ -59,7 +59,7 @@ func initRouter(allowedCORSDomains string) *gin.Engine {
 
 	//TODO: Consider if this should be under secured route. Bid fees are a concern.
 	api.POST("/zenith", endpoints.SwapZenith)
-	api.POST("/zenithqueued", endpoints.QueueZenith)
+	api.POST("/scheduleswap", endpoints.QueueZenith)
 
 	//Since users do NOT directly sign Authz swap requests, this endpoint is secured with a JWT to prevent abuse
 	secured.POST("/authz", endpoints.SwapAuthz)
