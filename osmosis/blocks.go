@@ -44,10 +44,7 @@ func AwaitBlocks(wssHost string, height chan int64, exitAfterFails int) {
 	c, _, err := websocket.DefaultDialer.Dial(u.String(), nil)
 	if err != nil {
 		fmt.Println(err.Error())
-		fails = fails + 1
-		if fails >= exitAfterFails {
-			return
-		}
+		return
 	}
 
 	defer c.Close()
