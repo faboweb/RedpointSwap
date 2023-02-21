@@ -8,6 +8,7 @@ import (
 	"github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/config"
 	"github.com/DefiantLabs/RedpointSwap/osmosis"
+	"github.com/DefiantLabs/RedpointSwap/simulator"
 	"github.com/cosmos/cosmos-sdk/client"
 	ctypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/types"
@@ -21,7 +22,7 @@ func SwapAuthz(context *gin.Context) {
 	start := time.Now()
 	conf := config.Conf
 
-	var request api.SimulatedSwapResult
+	var request simulator.SimulatedSwapResult
 	if err := context.ShouldBindJSON(&request); err != nil {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		context.Abort()
@@ -100,7 +101,7 @@ func SwapAuthz(context *gin.Context) {
 	context.JSON(http.StatusOK, gin.H{"id": id})
 }
 
-func buildUserSwap(simulatedUserSwap *api.SimulatedSwap, address string) types.Msg {
+func buildUserSwap(simulatedUserSwap *simulator.SimulatedSwap, address string) types.Msg {
 	tokenIn := simulatedUserSwap.TokenIn
 	tokenOutMinAmt := simulatedUserSwap.TokenOutMinAmount
 	routes := simulatedUserSwap.Routes
@@ -132,7 +133,7 @@ func submitTx(
 
 func buildSwaps(
 	txClient client.Context,
-	swapRequest api.SimulatedSwapResult,
+	swapRequest simulator.SimulatedSwapResult,
 ) (msgs []types.Msg, gasNeeded uint64, err error) {
 	msgs = []types.Msg{}
 	msgUserSwap := buildUserSwap(swapRequest.SimulatedUserSwap, swapRequest.UserAddress)

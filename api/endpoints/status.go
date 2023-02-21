@@ -28,8 +28,16 @@ func GetTradeStatus(context *gin.Context) {
 		return
 	}
 
-	tradeStatus := convertToStatus(ats)
-	context.JSON(http.StatusOK, tradeStatus)
+	zenithQueued := api.IsZenithQueued(id)
+	var ts TradeStatus
+	if zenithQueued {
+		ts = TradeStatus{
+			UserTxStatus: "Waiting for Zenith block",
+		}
+	} else {
+		ts = convertToStatus(ats)
+	}
+	context.JSON(http.StatusOK, ts)
 }
 
 func convertToStatus(userTrade *api.ArbitrageTxSet) TradeStatus {

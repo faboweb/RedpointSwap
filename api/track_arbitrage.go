@@ -9,6 +9,8 @@ import (
 
 	"github.com/DefiantLabs/RedpointSwap/config"
 	"github.com/DefiantLabs/RedpointSwap/osmosis"
+	"github.com/DefiantLabs/RedpointSwap/simulator"
+	"github.com/DefiantLabs/RedpointSwap/zenith"
 	"github.com/cosmos/cosmos-sdk/client"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	bank "github.com/cosmos/cosmos-sdk/x/bank/types"
@@ -16,8 +18,11 @@ import (
 	"go.uber.org/zap"
 )
 
-// Tracks arbitrage TXs
+// Tracks arbitrage TX sets that have been submitted to the chain
 var submittedtxs sync.Map
+
+// Tracks Zenith requests that are queued waiting for a Zenith block. Once submitted, will be moved to the submittedtxs queue
+var zenithQueue sync.Map
 
 type ArbitrageTxSet struct {
 	Processed                      bool              //Once the 'TXs' are finished on-chain and we query for initial stats
@@ -26,7 +31,7 @@ type ArbitrageTxSet struct {
 	Protocol                       string            //Either 'Zenith' or 'Authz' (at present)
 	UserAddress                    string
 	HotWalletAddress               string
-	Simulation                     *SimulatedSwapResult
+	Simulation                     *simulator.SimulatedSwapResult
 	HotWalletZenithFees            sdk.Coins
 	HotWalletTxFees                sdk.Coins //Total fees that the hot wallet paid for this TX set (Zenith fees and TX fees)
 	UserTxFees                     sdk.Coins //Total TX fees that the user paid for this TX set
@@ -61,6 +66,11 @@ type Swap struct {
 	TokenOut        sdk.Coin
 }
 
+func IsZenithQueued(id string) bool {
+	_, ok := zenithQueue.Load(id)
+	return ok
+}
+
 func GetStatusForSubmittedTxs(id string) (*ArbitrageTxSet, error) {
 	val, ok := submittedtxs.Load(id)
 	if ok {
@@ -73,8 +83,66 @@ func GetStatusForSubmittedTxs(id string) (*ArbitrageTxSet, error) {
 	return nil, fmt.Errorf("no TXs found for ID %s", id)
 }
 
+func QueueZenithRequest(zenithBid zenith.QueuedBidRequest) {
+	zenithQueue.Store(zenithBid.SimulatedSwap.UserAddress, zenithBid)
+}
+
+func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
+	nextBlock := lastChainHeight + 1
+	pendingZBlocks := zenith.GetZenithBlocks()
+
+	conf := config.Conf
+	txClientSubmit, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.GetApiRpcSubmitTxEndpoint(), conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
+	if err != nil {
+		config.Logger.Error("GetOsmosisTxClient", zap.Error(err))
+		return
+	}
+
+	for _, zBlock := range pendingZBlocks {
+		if zBlock.Height == nextBlock && zBlock.IsZenithBlock {
+			var addrKey string
+			var zenithBid *zenith.QueuedBidRequest
+
+			zenithQueue.Range(func(key any, val any) bool {
+				ok := false
+				zenithBid, ok = val.(*zenith.QueuedBidRequest)
+				if ok {
+					b64ZenithTxs, txs, err := zenith.GetZenithBid(zBlock, *zenithBid, txClientSubmit)
+					if err == nil {
+						bidReq := &zenith.ZenithBidRequest{
+							ChainID: zBlock.Auction.ChainID,
+							Height:  zBlock.Height,
+							Txs:     b64ZenithTxs,
+						}
+
+						err = zenith.PlaceBid(bidReq)
+						if err == nil {
+							_, err := AddTxSet(txs, &zenithBid.SimulatedSwap, txClientSubmit.TxConfig.TxDecoder(),
+								"Zenith", zenithBid.SimulatedSwap.UserAddress, config.HotWalletAddress)
+							if err != nil {
+								fmt.Println("Zenith: Tracking info may be unavailable for TX set due to unexpected error " + err.Error())
+							} else {
+								addrKey = key.(string) //allow it to be removed from the queue later
+							}
+						}
+					} else {
+						fmt.Printf("Issue in GetZenithBid(), failed to bid: %s\n", err.Error())
+					}
+				}
+
+				return false
+			})
+
+			if addrKey != "" {
+				zenithQueue.Delete(addrKey)
+			}
+		}
+	}
+}
+
+// Tracks TXs that were already submitted on chain.
 // Track the TX set using the hash from the first TX in the set as the key
-func AddTxSet(txs [][]byte, simulation *SimulatedSwapResult, txDecoder sdk.TxDecoder, protocol string, userAddress string, hotWalletAddress string) (id string, err error) {
+func AddTxSet(txs [][]byte, simulation *simulator.SimulatedSwapResult, txDecoder sdk.TxDecoder, protocol string, userAddress string, hotWalletAddress string) (id string, err error) {
 
 	if len(txs) == 0 {
 		err = errors.New("no TXs in AddTxSet()")

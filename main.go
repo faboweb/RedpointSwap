@@ -80,7 +80,7 @@ func main() {
 	//Track average time between blocks and notify Zenith when a new block is available
 	go func() {
 		defer close(done)
-		osmosis.ProcessNewBlock(newBlocks, []func(int64, int64){zenith.ZenithBlockNotificationHandler, api.ArbitrageBlockNotificationHandler})
+		osmosis.ProcessNewBlock(newBlocks, []func(int64, int64){zenith.ZenithBlockNotificationHandler, api.ArbitrageBlockNotificationHandler, api.ExecuteQueuedZenith})
 	}()
 
 	go func() {
