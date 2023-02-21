@@ -100,13 +100,20 @@ func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
 
 	for _, zBlock := range pendingZBlocks {
 		if zBlock.Height == nextBlock && zBlock.IsZenithBlock {
-			var addrKey string
 			var zenithBid *zenith.QueuedBidRequest
+			rmList := []string{}
 
 			zenithQueue.Range(func(key any, val any) bool {
 				ok := false
 				zenithBid, ok = val.(*zenith.QueuedBidRequest)
 				if ok {
+					reqExpiration, _ := time.Parse(time.RFC3339, zenithBid.Expiration)
+					if reqExpiration.Before(zBlock.ProjectedBlocktime) {
+						fmt.Printf("Zenith request %+v expired, projected blocktime for the next Zenith block is %s\n", zenithBid, zBlock.ProjectedBlocktime)
+						rmList = append(rmList, key.(string))
+						return true
+					}
+
 					b64ZenithTxs, txs, err := zenith.GetZenithBid(zBlock, *zenithBid, txClientSubmit)
 					if err == nil {
 						bidReq := &zenith.ZenithBidRequest{
@@ -122,7 +129,7 @@ func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
 							if err != nil {
 								fmt.Println("Zenith: Tracking info may be unavailable for TX set due to unexpected error " + err.Error())
 							} else {
-								addrKey = key.(string) //allow it to be removed from the queue later
+								rmList = append(rmList, key.(string)) //allow it to be removed from the queue later
 							}
 						}
 					} else {
@@ -133,8 +140,8 @@ func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
 				return false
 			})
 
-			if addrKey != "" {
-				zenithQueue.Delete(addrKey)
+			for _, k := range rmList {
+				zenithQueue.Delete(k)
 			}
 		}
 	}
