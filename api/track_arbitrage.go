@@ -85,7 +85,6 @@ func QueueZenithRequest(zenithBid zenith.UserZenithRequest) (requestId string) {
 }
 
 func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
-	nextBlock := lastChainHeight + 1
 	pendingZBlocks := zenith.GetZenithBlocks()
 
 	conf := config.Conf
@@ -96,7 +95,7 @@ func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
 	}
 
 	for _, zBlock := range pendingZBlocks {
-		if zBlock.Height == nextBlock && zBlock.IsZenithBlock {
+		if zBlock.Height > lastChainHeight && zBlock.IsZenithBlock {
 			rmList := []string{}
 
 			txqueue.Range(func(key any, val any) bool {
@@ -635,7 +634,7 @@ func ParseZenithCommittedTxs(chainHeight int64, _ int64) {
 					zenithTxSet.UserProfitShareTx.ArbitrageProfitsReceived = coinsReceived
 				}
 			}
-		} else {
+		} else if ok && zenithTxSet.Committed {
 			fmt.Printf("Unknown val in submittedtxs map\n")
 		}
 		return true
