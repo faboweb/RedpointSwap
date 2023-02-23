@@ -474,10 +474,27 @@ func ParseZenithCommittedTxs(chainHeight int64, _ int64) {
 
 	txqueue.Range(func(_, val any) bool {
 		zenithTxSet, ok := val.(*ZenithArbitrageTxSet)
-		if ok && !zenithTxSet.Committed {
+
+		if ok {
 			zenithTxSet.LastChainHeight = chainHeight
+
+			if zenithTxSet.Committed && (zenithTxSet.SubmittedAuctionBid != nil &&
+				(zenithTxSet.LastChainHeight > zenithTxSet.SubmittedAuctionBid.Height)) {
+
+				if len(zenithTxSet.TradeTxs) == 0 {
+					zenithTxSet.Committed = false
+				} else {
+					osmosisTxs := queryOsmosisTxs(zenithTxSet.TradeTxs, txClientSearch)
+					if len(osmosisTxs) == 0 {
+						zenithTxSet.Committed = false
+					}
+				}
+			}
+		}
+
+		if ok && !zenithTxSet.Committed && !zenithTxSet.IsAwaitingZenithBlock() {
 			osmosisTxs := queryOsmosisTxs(zenithTxSet.TradeTxs, txClientSearch)
-			if len(osmosisTxs) == len(zenithTxSet.TradeTxs) {
+			if len(zenithTxSet.TradeTxs) != 0 && len(osmosisTxs) > 0 {
 				zenithTxSet.Committed = true
 			} else {
 				fmt.Printf("Waiting for TXs to finish: %s\n", getHashStr(zenithTxSet.TradeTxs))
@@ -597,7 +614,7 @@ func ParseZenithCommittedTxs(chainHeight int64, _ int64) {
 				zenithTxSet.UserProfitShareTx.TxHash = resp.TxHash
 				config.Logger.Error("Send user profit share", zap.Uint32("TX code", resp.Code), zap.String("tx hash", resp.TxHash))
 			}
-		} else if ok && zenithTxSet.Committed && zenithTxSet.UserProfitShareTx.Initiated && !zenithTxSet.UserProfitShareTx.Committed {
+		} else if ok && zenithTxSet.Committed && zenithTxSet.UserProfitShareTx.Initiated && !zenithTxSet.HotWalletArbitrageProfitActual.IsAnyNegative() && !zenithTxSet.UserProfitShareTx.Committed {
 			//See if the user received their share
 			resp, err := osmosis.AwaitTx(txClientSearch, zenithTxSet.UserProfitShareTx.TxHash, 500*time.Millisecond)
 			coinsReceived := sdk.Coins{}
