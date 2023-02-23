@@ -65,8 +65,8 @@ func QueueZenith(context *gin.Context) {
 		return
 	}
 
-	api.QueueZenithRequest(req)
-	context.JSON(http.StatusOK, gin.H{"status": "Queued Zenith request", "id": req.SimulatedSwap.UserAddress})
+	reqId := api.QueueZenithRequest(req)
+	context.JSON(http.StatusOK, gin.H{"status": "Queued Zenith request", "id": reqId})
 }
 
 func ZenithAvailableBlocks(context *gin.Context) {
