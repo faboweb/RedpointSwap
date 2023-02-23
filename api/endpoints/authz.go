@@ -91,7 +91,7 @@ func SwapAuthz(context *gin.Context) {
 		return
 	}
 
-	id, err := api.AddTxSet([][]byte{txB}, &request, txClient.TxConfig.TxDecoder(), "Zenith", request.UserAddress, config.HotWalletAddress)
+	id, err := api.AddAuthzTxSet([][]byte{txB}, &request, txClient.TxConfig.TxDecoder(), request.UserAddress, config.HotWalletAddress)
 	if err != nil {
 		fmt.Println("Tracking info may be unavailable for TX set due to unexpected error " + err.Error())
 	}

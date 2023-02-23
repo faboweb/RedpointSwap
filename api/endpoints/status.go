@@ -8,12 +8,31 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-type TradeStatus struct {
-	Error               string //if there is some error getting status for the ID
-	UserTxStatus        string
-	UserArbitrageStatus string
-	UserSwaps           []api.Swap //The user's swaps (for their 'normal' trade)
-	UserArb             []sdk.Coin //Arb we sent to the user ('ArbitrageStatus' will indicate received, pending, or failed)
+type AuthzTradeStatus struct {
+	UserArbitrage    UserArbitrageEarnings
+	ChainHeight      int64      //The last known height of the chain
+	TxsCommitted     bool       //True if our TXs were included in the block
+	UserSwaps        []api.Swap //The user's swaps (for their 'normal' trade)
+	ErrorCheckStatus string     //if some error occurred checking the status (just query the status endpoint again)
+	TxError          string     //if some error occurred processing the user's TXs
+}
+
+type ZenithTradeStatus struct {
+	WaitingForBlock  bool  //True if we are waiting for an available zenith block
+	ZenithBlockBid   int64 //Will be non-zero if we bid on an auction block
+	ChainHeight      int64 //The last known height of the chain
+	TxsCommitted     bool  //True if our TXs were included in the block (only makes sense if ChainHeight >= ZenithBlockBid)
+	UserArbitrage    UserArbitrageEarnings
+	UserSwaps        []api.Swap //The user's swaps (for their 'normal' trade)
+	ErrorCheckStatus string     //if some error occurred checking the status (just query the status endpoint again)
+	TxError          string     //if some error occurred processing the user's TXs
+}
+
+type UserArbitrageEarnings struct {
+	HasArbitrage     bool       //Whether or not the user is owed any arbitrage
+	AmountInProgress []sdk.Coin //Arb we owe to the user, we are working on sending
+	AmountReceived   []sdk.Coin //If the user received the arbitrage
+	Error            string     //If there was some issue sending the user tokens or looking up the status
 }
 
 func GetTradeStatus(context *gin.Context) {
@@ -23,60 +42,100 @@ func GetTradeStatus(context *gin.Context) {
 		return
 	}
 
-	zenithQueued := api.IsZenithQueued(id)
-	ts := TradeStatus{
-		UserTxStatus: "trade not found (did it expire?)",
-	}
+	var err error
+	var zenithTxSet *api.ZenithArbitrageTxSet
+	var authzTxSet *api.AuthzArbitrageTxSet
 
-	if zenithQueued {
-		ts = TradeStatus{
-			UserTxStatus: "Waiting for Zenith block",
-		}
-	} else {
-		ats, err := api.GetStatusForSubmittedTxs(id)
-		if err != nil {
-			context.JSON(http.StatusOK, ts)
+	zenithTxSet, err = api.GetQueuedZenithTxSet(id)
+	if zenithTxSet == nil || err != nil {
+		authzTxSet, err = api.GetQueuedAuthzTxSet(id)
+		if authzTxSet == nil || err != nil {
+			context.JSON(http.StatusOK, gin.H{"error": "invalid ID (not found)"})
 			return
 		}
-		ts = convertToStatus(ats)
 	}
-	context.JSON(http.StatusOK, ts)
+
+	if zenithTxSet != nil {
+		ts := convertToZenithStatus(zenithTxSet)
+		context.JSON(http.StatusOK, ts)
+		return
+	} else {
+		ts := convertToAuthzStatus(authzTxSet)
+		context.JSON(http.StatusOK, ts)
+		return
+	}
 }
 
-func convertToStatus(userTrade *api.ArbitrageTxSet) TradeStatus {
-	ts := TradeStatus{}
-	ts.UserSwaps = getUserSwaps(userTrade)
-
-	if userTrade.Processed {
-		ts.UserTxStatus = "Trade finished"
-	} else {
-		ts.UserTxStatus = "Trade submitted, waiting for chain"
+func convertToZenithStatus(userTrade *api.ZenithArbitrageTxSet) ZenithTradeStatus {
+	ts := ZenithTradeStatus{
+		UserArbitrage: UserArbitrageEarnings{},
 	}
 
-	if userTrade.UserProfitShareTx.Initiated && !userTrade.UserProfitShareTx.Committed {
-		if userTrade.UserProfitShareTx.ArbitrageProfitsPending.IsZero() {
-			ts.UserArbitrageStatus = "No arbitrage"
-		} else {
-			ts.UserArbitrageStatus = "Sent user arbitrage, waiting for chain"
-			ts.UserArb = userTrade.UserProfitShareTx.ArbitrageProfitsPending
-		}
+	// TXs are awaiting submission to a Zenith auction if:
+	// 1) They have not been submitted to an auction before, OR
+	// 2) They have been submitted before but didn't win the auction
+	awaitingZenithBlock := userTrade.IsAwaitingZenithBlock()
+
+	if userTrade.SubmittedAuctionBid != nil {
+		ts.ZenithBlockBid = userTrade.SubmittedAuctionBid.Height
+	}
+	if userTrade.ErrorPlacingBid {
+		ts.TxError = "Error placing bid, will reattempt"
 	}
 
-	if userTrade.UserProfitShareTx.Initiated && userTrade.UserProfitShareTx.Committed {
-		ts.UserArbitrageStatus = "User received arbitrage"
-		ts.UserArb = userTrade.UserProfitShareTx.ArbitrageProfitsReceived
+	ts.WaitingForBlock = awaitingZenithBlock
+	ts.ChainHeight = userTrade.LastChainHeight
+	ts.UserSwaps = getUserSwaps(userTrade.TradeTxs)
+	ts.TxsCommitted = userTrade.Committed
 
-		if !userTrade.UserProfitShareTx.Succeeded {
-			ts.UserArbitrageStatus = "Problem sending user arbitrage (will not reattempt, please report address and time of trade)"
-		}
+	if !userTrade.UserProfitShareTx.ArbitrageProfitsPending.IsZero() || !userTrade.UserProfitShareTx.ArbitrageProfitsReceived.IsZero() {
+		ts.UserArbitrage.HasArbitrage = true
+	}
+
+	if !userTrade.UserProfitShareTx.ArbitrageProfitsPending.IsZero() && userTrade.UserProfitShareTx.ArbitrageProfitsReceived.IsZero() {
+		ts.UserArbitrage.AmountInProgress = userTrade.UserProfitShareTx.ArbitrageProfitsPending
+	} else if !userTrade.UserProfitShareTx.ArbitrageProfitsReceived.IsZero() {
+		ts.UserArbitrage.AmountReceived = userTrade.UserProfitShareTx.ArbitrageProfitsReceived
+	}
+
+	if userTrade.UserProfitShareTx.Initiated && userTrade.UserProfitShareTx.Committed && !userTrade.UserProfitShareTx.Succeeded {
+		ts.UserArbitrage.AmountReceived = sdk.Coins{}
+		ts.UserArbitrage.Error = "Problem sending user arbitrage (will not reattempt, please report address and time of trade)"
 	}
 
 	return ts
 }
 
-func getUserSwaps(userTrade *api.ArbitrageTxSet) []api.Swap {
+func convertToAuthzStatus(userTrade *api.AuthzArbitrageTxSet) AuthzTradeStatus {
+	ts := AuthzTradeStatus{
+		UserArbitrage: UserArbitrageEarnings{},
+	}
+
+	ts.ChainHeight = userTrade.LastChainHeight
+	ts.UserSwaps = getUserSwaps(userTrade.TradeTxs)
+	ts.TxsCommitted = userTrade.Committed
+
+	if !userTrade.UserProfitShareTx.ArbitrageProfitsPending.IsZero() || !userTrade.UserProfitShareTx.ArbitrageProfitsReceived.IsZero() {
+		ts.UserArbitrage.HasArbitrage = true
+	}
+
+	if !userTrade.UserProfitShareTx.ArbitrageProfitsPending.IsZero() && userTrade.UserProfitShareTx.ArbitrageProfitsReceived.IsZero() {
+		ts.UserArbitrage.AmountInProgress = userTrade.UserProfitShareTx.ArbitrageProfitsPending
+	} else if !userTrade.UserProfitShareTx.ArbitrageProfitsReceived.IsZero() {
+		ts.UserArbitrage.AmountReceived = userTrade.UserProfitShareTx.ArbitrageProfitsReceived
+	}
+
+	if userTrade.UserProfitShareTx.Initiated && userTrade.UserProfitShareTx.Committed && !userTrade.UserProfitShareTx.Succeeded {
+		ts.UserArbitrage.AmountReceived = sdk.Coins{}
+		ts.UserArbitrage.Error = "Problem sending user arbitrage (will not reattempt, please report address and time of trade)"
+	}
+
+	return ts
+}
+
+func getUserSwaps(tradeTxs []api.SubmittedTx) []api.Swap {
 	swaps := []api.Swap{}
-	for _, t := range userTrade.TradeTxs {
+	for _, t := range tradeTxs {
 		for _, swap := range t.Swaps {
 			if swap.IsUserSwap {
 				swaps = append(swaps, swap)

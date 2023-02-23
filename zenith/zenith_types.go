@@ -33,7 +33,7 @@ type BidRequest struct {
 	SimulatedSwap simulator.SimulatedSwapResult //Info from the simulator. This helps us estimate the proceeds and make an accurate auction bid.
 }
 
-type QueuedBidRequest struct {
+type UserZenithRequest struct {
 	Expiration    string                        //the request expires if not executed by this time. Must be RFC3339 formatted.
 	SwapTx        string                        `json:"user_swap"`      //signed base 64 encoded cosmos TX (user's swap only)
 	Kind          string                        `json:"kind,omitempty"` //either top or block, leave empty for top

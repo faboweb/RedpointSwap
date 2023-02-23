@@ -98,7 +98,7 @@ func IsZenithEligible(simResult simulator.SimulatedSwapResult, txClient cosmosCl
 	return
 }
 
-func GetZenithBid(zBlock *FutureBlock, req QueuedBidRequest, txClient cosmosClient.Context) ([]string, [][]byte, error) {
+func GetZenithBid(zBlock *FutureBlock, req UserZenithRequest, txClient cosmosClient.Context) ([]string, [][]byte, error) {
 	txs := [][]byte{}
 
 	// The hot wallet will protect itself by only submitting bids in a way that guarantees profits (e.g. arb profits > bid amount)
