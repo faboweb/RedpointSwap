@@ -73,7 +73,7 @@ func GetQueuedZenithTxSet(id string) (*ZenithArbitrageTxSet, error) {
 
 func QueueZenithRequest(zenithBid zenith.UserZenithRequest) (requestId string) {
 	requestId = randSeq(10)
-	zenithTx := ZenithArbitrageTxSet{
+	zenithTx := &ZenithArbitrageTxSet{
 		UserBidRequest: &zenithBid,
 		SubmittedTxSet: SubmittedTxSet{
 			Simulation: &zenithBid.SimulatedSwap,
