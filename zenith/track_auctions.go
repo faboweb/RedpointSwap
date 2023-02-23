@@ -52,7 +52,7 @@ func ZenithBlockNotificationHandler(lastChainHeight int64, millisecondsBetweenBl
 		return true
 	})
 
-	for height := lastChainHeight; height < lastChainHeight+10; height++ {
+	for height := lastChainHeight; height < lastChainHeight+5; height++ {
 		//We have never queried Zenith for the given block
 		if _, ok := zenithBlocks.Load(height); !ok {
 
