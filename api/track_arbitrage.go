@@ -454,8 +454,8 @@ func AuthzBlockNotificationHandler(chainHeight int64, _ int64) {
 					authzTxSet.UserProfitShareTx.ArbitrageProfitsReceived = coinsReceived
 				}
 			}
-		} else {
-			fmt.Printf("Unknown val in submittedtxs map\n")
+		} else if ok {
+			fmt.Printf("Unknown authz TX in submittedtxs map\n")
 		}
 		return true
 	})
@@ -464,7 +464,7 @@ func AuthzBlockNotificationHandler(chainHeight int64, _ int64) {
 // This function is called for every new block produced on the chain.
 // We check if there are TXs in our submittedtxs Map that completed on chain.
 // If so, we will log the expected vs. actual profits our Hot Wallet made.
-func ZenithBlockNotificationHandler(chainHeight int64, _ int64) {
+func ParseZenithCommittedTxs(chainHeight int64, _ int64) {
 	conf := config.Conf
 	txClientSearch, err := osmosis.GetOsmosisTxClient(conf.Api.ChainID, conf.GetApiRpcSearchTxEndpoint(), conf.Api.KeyringHomeDir, conf.Api.KeyringBackend, conf.Api.HotWalletKey)
 	if err != nil {
