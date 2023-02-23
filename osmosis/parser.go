@@ -106,16 +106,16 @@ type OsmosisTx struct {
 // Parses and returns token in, token out, fees, and addresses for 'MsgSwapExactAmountIn' and other types.
 func ParseRedpointSwaps(txResponse *txTypes.GetTxResponse, txHash string) OsmosisTx {
 	swapTx := OsmosisTx{
-		Swaps:    []Swap{},
-		Sends:    []Send{},
-		FeePayer: txResponse.Tx.FeePayer().String(),
-		Hash:     txHash,
+		Swaps: []Swap{},
+		Sends: []Send{},
+		Hash:  txHash,
 	}
 
 	if txResponse.TxResponse.Code != 0 {
 		return swapTx
 	}
 
+	swapTx.FeePayer = txResponse.Tx.FeePayer().String()
 	swapTx.Fees = txResponse.Tx.GetFee()
 
 	mergedTx, err := convertSdkResp(txResponse.Tx, txResponse.TxResponse)

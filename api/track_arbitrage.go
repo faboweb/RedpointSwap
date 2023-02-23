@@ -109,6 +109,7 @@ func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
 					awaitingZenithBlock := zenithTxSet.IsAwaitingZenithBlock()
 
 					if !awaitingZenithBlock {
+						fmt.Printf("Zenith request %+v is already being processed\n", zenithTxSet)
 						return true
 					}
 
@@ -121,11 +122,14 @@ func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
 
 					b64ZenithTxs, txs, err := zenith.GetZenithBid(zBlock, *zenithBid, txClientSubmit)
 					if err == nil {
+
 						bidReq := &zenith.ZenithBidRequest{
 							ChainID: zBlock.Auction.ChainID,
 							Height:  zBlock.Height,
 							Txs:     b64ZenithTxs,
 						}
+
+						fmt.Printf("ZenithBidRequest %+v being submitted for Zenith request %+v\n", bidReq, zenithTxSet)
 
 						err = zenith.PlaceBid(bidReq)
 						zenithTxSet.ErrorPlacingBid = err != nil
