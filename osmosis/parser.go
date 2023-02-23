@@ -3,11 +3,13 @@ package osmosis
 import (
 	"fmt"
 
+	"github.com/DefiantLabs/RedpointSwap/config"
 	sdk "github.com/cosmos/cosmos-sdk/types"
 	txTypes "github.com/cosmos/cosmos-sdk/types/tx"
 	"github.com/cosmos/cosmos-sdk/x/authz"
 	bank "github.com/cosmos/cosmos-sdk/x/bank/types"
 	gammTypes "github.com/osmosis-labs/osmosis/v13/x/gamm/types"
+	"go.uber.org/zap"
 )
 
 func convertSdkResp(currTx *txTypes.Tx, currTxResp *sdk.TxResponse) (*MergedTx, error) {
@@ -110,6 +112,16 @@ func ParseRedpointSwaps(txResponse *txTypes.GetTxResponse, txHash string) Osmosi
 		Sends: []Send{},
 		Hash:  txHash,
 	}
+
+	//Chain tx and query client
+	txClient, err := GetOsmosisTxClient(config.Conf.Api.ChainID, config.Conf.GetApiRpcSearchTxEndpoint(),
+		config.Conf.Api.KeyringHomeDir, config.Conf.Api.KeyringBackend, config.Conf.Api.HotWalletKey)
+	if err != nil {
+		config.Logger.Fatal("GetOsmosisTxClient", zap.Error(err))
+		return swapTx
+	}
+
+	txResponse.Tx.UnpackInterfaces(txClient.Codec)
 
 	if txResponse.TxResponse.Code != 0 {
 		return swapTx
