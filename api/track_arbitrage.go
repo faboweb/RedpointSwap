@@ -120,7 +120,7 @@ func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
 						return true
 					}
 
-					b64ZenithTxs, txs, err := zenith.GetZenithBid(zBlock, *zenithBid, txClientSubmit)
+					b64ZenithTxs, txs, arbFees, err := zenith.GetZenithBid(zBlock, *zenithBid, txClientSubmit)
 					if err == nil {
 
 						bidReq := &zenith.ZenithBidRequest{
@@ -133,6 +133,7 @@ func ExecuteQueuedZenith(lastChainHeight int64, _ int64) {
 
 						err = zenith.PlaceBid(bidReq)
 						zenithTxSet.ErrorPlacingBid = err != nil
+						zenithTxSet.HotWalletTxFees = sdk.NewCoins(sdk.NewCoin("uosmo", arbFees))
 
 						if !zenithTxSet.ErrorPlacingBid {
 							zenithTxSet.SubmittedAuctionBid = bidReq
@@ -229,7 +230,6 @@ func UpdateZenithTxSet(zenithTxSet *ZenithArbitrageTxSet, txs [][]byte, txDecode
 	zenithTxSet.UserAddress = userAddress
 	zenithTxSet.HotWalletAddress = hotWalletAddress
 	zenithTxSet.UserTxFees = sdk.Coins{}
-	zenithTxSet.HotWalletTxFees = sdk.Coins{}
 	zenithTxSet.TotalArbitrageRevenue = sdk.Coins{}
 	return nil
 }
@@ -328,6 +328,7 @@ func AuthzBlockNotificationHandler(chainHeight int64, _ int64) {
 				return true
 			}
 			authzTxSet.TradeTxs = []SubmittedTx{}
+			authzTxSet.HotWalletTxFees = sdk.Coins{}
 
 			//Handle TX fees and fees paid to Zenith (if applicable), record any swaps that happened
 			for _, parsedTx := range osmosisTxs {
@@ -504,6 +505,7 @@ func ParseZenithCommittedTxs(chainHeight int64, _ int64) {
 				return true
 			}
 			zenithTxSet.TradeTxs = []SubmittedTx{}
+			zenithTxSet.HotWalletTxFees = sdk.Coins{}
 
 			//Handle TX fees and fees paid to Zenith (if applicable), record any swaps that happened
 			for _, parsedTx := range osmosisTxs {
