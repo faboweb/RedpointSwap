@@ -52,7 +52,7 @@ func ZenithBlockNotificationHandler(lastChainHeight int64, millisecondsBetweenBl
 		return true
 	})
 
-	for height := lastChainHeight; height < lastChainHeight+10; height++ {
+	for height := lastChainHeight; height < lastChainHeight+5; height++ {
 		//We have never queried Zenith for the given block
 		if _, ok := zenithBlocks.Load(height); !ok {
 
@@ -65,7 +65,7 @@ func ZenithBlockNotificationHandler(lastChainHeight int64, millisecondsBetweenBl
 
 			//If there was an error or if the auction is too far in the future, we'll need to requery.
 			//Otherwise, the query succeeded and we need to record whether or not this is a Zenith block.
-			if err != nil && zenithCode != AuctionTooFarInFuture {
+			if err == nil && zenithCode != AuctionTooFarInFuture {
 				msUntilBlock := (height - lastChainHeight) * millisecondsBetweenBlocks
 
 				zBlock := &FutureBlock{

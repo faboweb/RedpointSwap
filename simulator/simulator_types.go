@@ -1,4 +1,4 @@
-package api
+package simulator
 
 import (
 	cosmosTypes "github.com/cosmos/cosmos-sdk/types"

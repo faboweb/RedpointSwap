@@ -58,9 +58,11 @@ func ProcessNewBlock(height chan int64, subscribers []func(height int64, avgTime
 		lastHeight = newHeight
 		lastBlockStart = time.Now()
 
-		//Notify subscribers about the new block
-		for _, subscriber := range subscribers {
-			go subscriber(lastHeight, averageBlockTime)
-		}
+		go func() {
+			//Notify subscribers about the new block
+			for _, subscriber := range subscribers {
+				subscriber(lastHeight, averageBlockTime)
+			}
+		}()
 	}
 }

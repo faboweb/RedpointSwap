@@ -52,12 +52,14 @@ func initRouter(allowedCORSDomains string) *gin.Engine {
 	secured := api.Group("/secured")
 	secured.Use(Auth())
 
+	api.GET("/status", endpoints.GetTradeStatus)                 //get status of a given in progress or completed trade
 	api.GET("/zenithavailable", endpoints.ZenithAvailableBlocks) //get list of available zenith blocks
 	api.GET("/grantee", endpoints.AuthzGranteeInfo)              //API endpoint so that clients know what hot wallet to authorize for grants
 	api.POST("/token", endpoints.GenerateToken)
 
 	//TODO: Consider if this should be under secured route. Bid fees are a concern.
-	api.POST("/zenith", endpoints.SwapZenith)
+	api.POST("/zenith", endpoints.QueueZenith)
+	api.POST("/scheduleswap", endpoints.QueueZenith)
 
 	//Since users do NOT directly sign Authz swap requests, this endpoint is secured with a JWT to prevent abuse
 	secured.POST("/authz", endpoints.SwapAuthz)

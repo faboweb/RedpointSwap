@@ -8,6 +8,7 @@ import (
 	"github.com/DefiantLabs/RedpointSwap/api"
 	"github.com/DefiantLabs/RedpointSwap/config"
 	"github.com/DefiantLabs/RedpointSwap/osmosis"
+	"github.com/DefiantLabs/RedpointSwap/simulator"
 	"github.com/cosmos/cosmos-sdk/client"
 	ctypes "github.com/cosmos/cosmos-sdk/codec/types"
 	"github.com/cosmos/cosmos-sdk/types"
@@ -21,7 +22,7 @@ func SwapAuthz(context *gin.Context) {
 	start := time.Now()
 	conf := config.Conf
 
-	var request api.SimulatedSwapResult
+	var request simulator.SimulatedSwapResult
 	if err := context.ShouldBindJSON(&request); err != nil {
 		context.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		context.Abort()
@@ -81,7 +82,7 @@ func SwapAuthz(context *gin.Context) {
 		return
 	}
 
-	res, err := submitTx(txClient, msgs, gas)
+	res, txB, err := submitTx(txClient, msgs, gas)
 	if err != nil && res == nil {
 		context.JSON(http.StatusBadRequest, "failed to submit trade via RPC")
 		return
@@ -90,12 +91,17 @@ func SwapAuthz(context *gin.Context) {
 		return
 	}
 
+	id, err := api.AddAuthzTxSet([][]byte{txB}, &request, txClient.TxConfig.TxDecoder(), request.UserAddress, config.HotWalletAddress)
+	if err != nil {
+		fmt.Println("Tracking info may be unavailable for TX set due to unexpected error " + err.Error())
+	}
+
 	end := time.Now()
 	config.Logger.Info("Swap Authz", zap.Duration("time (milliseconds)", end.Sub(start)/time.Millisecond))
-	context.JSON(http.StatusOK, gin.H{"txhash": res.TxHash})
+	context.JSON(http.StatusOK, gin.H{"id": id})
 }
 
-func buildUserSwap(simulatedUserSwap *api.SimulatedSwap, address string) types.Msg {
+func buildUserSwap(simulatedUserSwap *simulator.SimulatedSwap, address string) types.Msg {
 	tokenIn := simulatedUserSwap.TokenIn
 	tokenOutMinAmt := simulatedUserSwap.TokenOutMinAmount
 	routes := simulatedUserSwap.Routes
@@ -116,17 +122,18 @@ func submitTx(
 	txClient client.Context,
 	msgs []types.Msg,
 	txGas uint64,
-) (*types.TxResponse, error) {
+) (*types.TxResponse, []byte, error) {
 	txBytes, err := osmosis.GetSignedTx(txClient, msgs, txGas)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	return txClient.BroadcastTxSync(txBytes)
+	r, e := txClient.BroadcastTxSync(txBytes)
+	return r, txBytes, e
 }
 
 func buildSwaps(
 	txClient client.Context,
-	swapRequest api.SimulatedSwapResult,
+	swapRequest simulator.SimulatedSwapResult,
 ) (msgs []types.Msg, gasNeeded uint64, err error) {
 	msgs = []types.Msg{}
 	msgUserSwap := buildUserSwap(swapRequest.SimulatedUserSwap, swapRequest.UserAddress)
@@ -152,7 +159,7 @@ func buildSwaps(
 		fmt.Printf("Authz requested with arbitrage swap: Token in: %s. Pool(s) %s.\n",
 			swapRequest.ArbitrageSwap.SimulatedSwap.TokenIn.String(), swapRequest.ArbitrageSwap.SimulatedSwap.Pools)
 
-		arbSwaps, err := osmosis.BuildArbitrageSwap(txClient, swapRequest.ArbitrageSwap.SimulatedSwap)
+		arbSwaps, err := osmosis.BuildArbitrageSwap(txClient, swapRequest.ArbitrageSwap.SimulatedSwap.TokenIn, swapRequest.ArbitrageSwap.SimulatedSwap.Routes)
 		if err != nil {
 			return nil, 0, err
 		}
