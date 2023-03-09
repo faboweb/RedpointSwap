@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"os"
 	"strings"
 	"time"
 
@@ -16,7 +17,10 @@ func InitializeRestApi() {
 	config.Logger.Info("CORS domains", zap.String("Allowed domains", config.Conf.Api.AllowedCORSDomains))
 
 	port := ":80"
-	if config.Conf.Api.Port != "" {
+	// we need to allow setting the port via an environment variable as GC App Engine is using this variable to check the health of the container
+	if os.Getenv("PORT") != "" {
+		port = ":" + os.Getenv("PORT")
+	} else if config.Conf.Api.Port != "" {
 		if !strings.HasPrefix(port, ":") {
 			port = ":" + config.Conf.Api.Port
 		} else {

@@ -14,7 +14,15 @@ steps:
         "gcloud secrets versions access latest --secret=Keychain --format='get(payload.data)' | tr '_-' '/+' | base64 -d > ./keychain.zip",
       ]
   - name: "gcr.io/cloud-builders/docker"
-    args: ["build", "-t", "gcr.io/interchainswapdev/redpointswap", "."]
+    args:
+      [
+        "build",
+        "-t",
+        "gcr.io/interchainswapdev/redpointswap",
+        "--file",
+        "./Dockerfile.GCloud",
+        ".",
+      ]
   # Push the container image to Container Registry
   - name: "gcr.io/cloud-builders/docker"
     args: ["push", "gcr.io/interchainswapdev/redpointswap"]
