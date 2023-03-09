@@ -2,7 +2,7 @@ name: Sync Fork
 
 on:
   schedule:
-    - cron: '*/30 * * * *' # every 30 minutes
+    - cron: '*/0 0 * * *' # every day at 0:00
   workflow_dispatch: # on button click
 
 jobs:
@@ -16,4 +16,3 @@ jobs:
           owner: DefiantLabs
           base: main
           head: main
-          token: ${{ secrets.PERSONAL_TOKEN }}
