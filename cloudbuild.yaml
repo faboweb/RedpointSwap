@@ -1,26 +1,38 @@
 steps:
-- name: gcr.io/cloud-builders/gcloud
-  entrypoint: "bash"
-  args:
-    [
-      "-c",
-      "gcloud secrets versions access latest --secret=Config --format='get(payload.data)' | tr '_-' '/+' | base64 -d > ./config.toml",
-    ]
-- name: gcr.io/cloud-builders/gcloud
-  entrypoint: "bash"
-  args:
-    [
-      "-c",
-      "gcloud secrets versions access latest --secret=Keychain --format='get(payload.data)' | tr '_-' '/+' | base64 -d > ./keychain.zip",
-    ]
-- name: "gcr.io/cloud-builders/docker"
-  args: ["build", "-t", "gcr.io/interchainswapdev/redpointswap", "."]
-# Push the container image to Container Registry
-- name: 'gcr.io/cloud-builders/docker'
-  args: ['push', 'gcr.io/interchainswapdev/redpointswap']
-# Deploy container image to Cloud Run
-- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
-  entrypoint: gcloud
-  args: ['run', 'deploy', 'redpointswap', '--image', 'gcr.io/interchainswapdev/redpointswap', '--region', 'us-central1', '--command', 'RedpointSwap']
+  - name: gcr.io/cloud-builders/gcloud
+    entrypoint: "bash"
+    args:
+      [
+        "-c",
+        "gcloud secrets versions access latest --secret=Config --format='get(payload.data)' | tr '_-' '/+' | base64 -d > ./config.toml",
+      ]
+  - name: gcr.io/cloud-builders/gcloud
+    entrypoint: "bash"
+    args:
+      [
+        "-c",
+        "gcloud secrets versions access latest --secret=Keychain --format='get(payload.data)' | tr '_-' '/+' | base64 -d > ./keychain.zip",
+      ]
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["build", "-t", "gcr.io/interchainswapdev/redpointswap", "."]
+  # Push the container image to Container Registry
+  - name: "gcr.io/cloud-builders/docker"
+    args: ["push", "gcr.io/interchainswapdev/redpointswap"]
+  # Deploy container image to Cloud Run
+  - name: "gcr.io/google.com/cloudsdktool/cloud-sdk"
+    entrypoint: gcloud
+    args:
+      [
+        "run",
+        "deploy",
+        "redpointswap",
+        "--image",
+        "gcr.io/interchainswapdev/redpointswap",
+        "--region",
+        "us-central1",
+        "--command",
+        "RedpointSwap",
+        "--allow-unauthenticated",
+      ]
 images:
-- gcr.io/interchainswapdev/redpointswap
+  - gcr.io/interchainswapdev/redpointswap
