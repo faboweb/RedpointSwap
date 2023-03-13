@@ -104,4 +104,4 @@ USER defiant
 
 ENV PORT 8080
 EXPOSE 8080
-CMD ["RedpointSwap", "./config.toml"]
+CMD ["RedpointSwap", "./config.toml"] 
